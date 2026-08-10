@@ -7,7 +7,6 @@ import com.ktb.chatapp.model.Message;
 import com.ktb.chatapp.model.User;
 import com.ktb.chatapp.repository.FileRepository;
 import com.ktb.chatapp.service.FileUrl;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -33,6 +32,8 @@ public class MessageResponseMapper {
      * @return MessageResponse DTO
      */
     public MessageResponse mapToMessageResponse(Message message, User sender) {
+        // [CHANGED] handler/MessageResponseMapper.java: .readers(...) 매핑 제거.
+        // Message 모델에서 readers 필드 자체가 없어졌다 (Last Read Watermark 방식으로 전환).
         MessageResponse.MessageResponseBuilder builder = MessageResponse.builder()
                 .id(message.getId())
                 .content(message.getContent())
@@ -40,9 +41,7 @@ public class MessageResponseMapper {
                 .timestamp(message.toTimestampMillis())
                 .roomId(message.getRoomId())
                 .reactions(message.getReactions() != null ?
-                        message.getReactions() : new HashMap<>())
-                .readers(message.getReaders() != null ?
-                        message.getReaders() : new ArrayList<>());
+                        message.getReactions() : new HashMap<>());
 
         // 발신자 정보 설정
         if (sender != null) {

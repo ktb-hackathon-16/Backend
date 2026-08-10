@@ -81,7 +81,10 @@ class MessageLoaderTest {
         
         lenient().when(userRepository.findAllById(anySet()))
                 .thenReturn(List.of(testUser));
-        lenient().doNothing().when(messageReadStatusService).updateReadStatus(anyList(), anyString());
+        // [CHANGED] test/.../MessageLoaderTest.java: updateReadStatus 시그니처가
+        // (roomId, userId, lastReadMessageId, lastReadAt)로 바뀐 것에 맞춰 스텁 수정.
+        lenient().doNothing().when(messageReadStatusService)
+                .updateReadStatus(anyString(), anyString(), anyString(), any(LocalDateTime.class));
     }
     
     private Message createMessage(String id, LocalDateTime timestamp) {

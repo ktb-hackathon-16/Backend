@@ -6,11 +6,13 @@ import com.corundumstudio.socketio.annotation.OnEvent;
 import com.ktb.chatapp.dto.FetchMessagesRequest;
 import com.ktb.chatapp.dto.FetchMessagesResponse;
 import com.ktb.chatapp.dto.JoinRoomSuccessResponse;
+import com.ktb.chatapp.dto.ParticipantReadState;
 import com.ktb.chatapp.dto.UserResponse;
 import com.ktb.chatapp.model.Message;
 import com.ktb.chatapp.model.MessageType;
 import com.ktb.chatapp.model.Room;
 import com.ktb.chatapp.repository.MessageRepository;
+import com.ktb.chatapp.repository.ReadReceiptRepository;
 import com.ktb.chatapp.repository.RoomRepository;
 import com.ktb.chatapp.repository.UserRepository;
 import com.ktb.chatapp.websocket.socketio.SocketUser;
@@ -42,6 +44,9 @@ public class RoomJoinHandler {
     private final MessageLoader messageLoader;
     private final MessageResponseMapper messageResponseMapper;
     private final RoomLeaveHandler roomLeaveHandler;
+    // [ADDED] handler/RoomJoinHandler.java: 방 입장 시 참가자별 읽음 워터마크 스냅샷을
+    // 내려주기 위해 추가. 참고: model/ReadReceipt.java, dto/ParticipantReadState.java
+    private final ReadReceiptRepository readReceiptRepository;
     
     @OnEvent(JOIN_ROOM)
     public void handleJoinRoom(SocketIOClient client, String roomId) {
@@ -78,6 +83,8 @@ public class RoomJoinHandler {
             client.joinRoom(roomId);
             userRooms.add(userId, roomId);
 
+            // [CHANGED] handler/RoomJoinHandler.java: .readers(new ArrayList<>()) 제거.
+            // Message 모델에 readers 필드가 더는 없다 (Last Read Watermark 방식).
             Message joinMessage = Message.builder()
                 .roomId(roomId)
                 .content(userName + "님이 입장하였습니다.")
@@ -85,7 +92,6 @@ public class RoomJoinHandler {
                 .timestamp(LocalDateTime.now())
                 .mentions(new ArrayList<>())
                 .reactions(new HashMap<>())
-                .readers(new ArrayList<>())
                 .metadata(new HashMap<>())
                 .build();
 
@@ -111,12 +117,22 @@ public class RoomJoinHandler {
                     .map(UserResponse::from)
                     .toList();
             
+            // [ADDED] handler/RoomJoinHandler.java: 참가자별 읽음 워터마크 스냅샷 조회.
+            // 프론트는 이 값으로 room.readReceipts를 초기화하고, 이후로는
+            // messagesRead 브로드캐스트(MessageReadHandler)만으로 갱신한다.
+            List<ParticipantReadState> participantReadStates = readReceiptRepository.findByRoomId(roomId)
+                    .stream()
+                    .map(receipt -> new ParticipantReadState(
+                            receipt.getUserId(), receipt.getLastReadMessageId(), receipt.getLastReadAt()))
+                    .toList();
+
             JoinRoomSuccessResponse response = JoinRoomSuccessResponse.builder()
                 .roomId(roomId)
                 .participants(participants)
                 .messages(messageLoadResult.getMessages())
                 .hasMore(messageLoadResult.isHasMore())
                 .activeStreams(Collections.emptyList())
+                .participantReadStates(participantReadStates)
                 .build();
 
             client.sendEvent(JOIN_ROOM_SUCCESS, response);
