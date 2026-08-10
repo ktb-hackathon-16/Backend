@@ -9,10 +9,13 @@ import com.ktb.chatapp.repository.RoomRepository;
 import com.ktb.chatapp.repository.UserRepository;
 import java.time.LocalDateTime;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -35,8 +38,17 @@ public class RoomService {
 
         try {
             // 전체 방을 조회해 최신순으로 정렬한다
-            List<RoomResponse> roomResponses = roomRepository.findAll().stream()
-                .map(room -> mapToRoomResponse(room, name))
+            List<Room> rooms = roomRepository.findAll();
+            Map<String, User> usersById = loadUsers(rooms);
+            Map<String, Integer> recentMessageCounts = recentMessageCounter.countRecentMessagesByRoomIds(
+                    rooms.stream()
+                            .map(Room::getId)
+                            .filter(Objects::nonNull)
+                            .distinct()
+                            .toList());
+
+            List<RoomResponse> roomResponses = rooms.stream()
+                .map(room -> mapToRoomResponse(room, name, usersById, recentMessageCounts))
                 .sorted(Comparator.comparing(
                     RoomResponse::getCreatedAtDateTime,
                     Comparator.nullsLast(Comparator.reverseOrder())))
@@ -181,18 +193,52 @@ public class RoomService {
     private RoomResponse mapToRoomResponse(Room room, String name) {
         if (room == null) return null;
 
-        User creator = null;
-        if (room.getCreator() != null) {
-            creator = userRepository.findById(room.getCreator()).orElse(null);
+        Map<String, Integer> recentMessageCounts = room.getId() == null
+                ? Map.of()
+                : Map.of(room.getId(), recentMessageCounter.countRecentMessages(room.getId()));
+        return mapToRoomResponse(room, name, loadUsers(List.of(room)), recentMessageCounts);
+    }
+
+    private Map<String, User> loadUsers(List<Room> rooms) {
+        Set<String> userIds = new HashSet<>();
+        for (Room room : rooms) {
+            if (room.getCreator() != null) {
+                userIds.add(room.getCreator());
+            }
+            if (room.getParticipantIds() != null) {
+                userIds.addAll(room.getParticipantIds());
+            }
         }
 
-        List<User> participants = room.getParticipantIds().stream()
-            .map(userRepository::findById)
-            .filter(Optional::isPresent)
-            .map(Optional::get)
+        if (userIds.isEmpty()) {
+            return Map.of();
+        }
+
+        return userRepository.findAllById(userIds).stream()
+                .filter(user -> user.getId() != null)
+                .collect(Collectors.toMap(User::getId, user -> user, (first, ignored) -> first));
+    }
+
+    private RoomResponse mapToRoomResponse(
+            Room room,
+            String name,
+            Map<String, User> usersById,
+            Map<String, Integer> recentMessageCounts) {
+        if (room == null) return null;
+
+        User creator = room.getCreator() == null ? null : usersById.get(room.getCreator());
+
+        Set<String> participantIds = room.getParticipantIds() == null
+                ? Set.of()
+                : room.getParticipantIds();
+        List<User> participants = participantIds.stream()
+            .map(usersById::get)
+            .filter(Objects::nonNull)
             .toList();
 
-        int recentMessageCount = recentMessageCounter.countRecentMessages(room.getId());
+        int recentMessageCount = room.getId() == null
+                ? 0
+                : recentMessageCounts.getOrDefault(room.getId(), 0);
 
         return RoomResponse.builder()
             .id(room.getId())
