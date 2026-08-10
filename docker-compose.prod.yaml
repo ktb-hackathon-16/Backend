@@ -1,0 +1,10 @@
+services:
+  backend-app:
+    image: ${BACKEND_IMAGE:-youngjin179/ktb-backend:1.0.0}
+    container_name: backend-app
+    restart: unless-stopped
+    env_file:
+      - ${BACKEND_ENV_FILE:-/etc/ktb/backend-app.env}
+    ports:
+      - "${BACKEND_HTTP_PORT:-8080}:5001"
+      - "${BACKEND_SOCKET_PORT:-5002}:5002"
