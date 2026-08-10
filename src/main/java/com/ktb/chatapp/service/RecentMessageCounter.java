@@ -33,7 +33,7 @@ public class RecentMessageCounter {
         LocalDateTime since = LocalDateTime.now().minus(RECENT_WINDOW);
         return messageRepository.countRecentMessagesByRoomIds(roomIds, since).stream()
                 .collect(Collectors.toMap(
-                        MessageRepository.RecentMessageCount::getRoomId,
+                        MessageRepository.RecentMessageCount::getRoom,
                         count -> (int) count.getCount()));
     }
 }

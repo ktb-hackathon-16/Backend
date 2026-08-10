@@ -8,9 +8,11 @@ import com.ktb.chatapp.model.User;
 import com.ktb.chatapp.repository.MessageRepository;
 import com.ktb.chatapp.repository.UserRepository;
 import com.ktb.chatapp.service.MessageReadStatusService;
-import jakarta.annotation.Nullable;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -68,12 +70,9 @@ public class MessageLoader {
         messageReadStatusService.updateReadStatus(messageIds, userId);
         
         // 메시지 응답 생성
-        List<MessageResponse> messageResponses = sortedMessages.stream()
-                .map(message -> {
-                    var user = findUserById(message.getSenderId());
-                    return messageResponseMapper.mapToMessageResponse(message, user);
-                })
-                .collect(Collectors.toList());
+        Map<String, User> usersById = loadUsers(sortedMessages);
+        List<MessageResponse> messageResponses = messageResponseMapper
+                .mapToMessageResponses(sortedMessages, usersById);
 
         boolean hasMore = messagePage.hasNext();
 
@@ -86,15 +85,18 @@ public class MessageLoader {
                 .build();
     }
 
-    /**
-     * AI 경우 null 반환 가능
-     */
-    @Nullable
-    private User findUserById(String id) {
-        if (id == null) {
-            return null;
+    private Map<String, User> loadUsers(List<Message> messages) {
+        Set<String> senderIds = messages.stream()
+                .map(Message::getSenderId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        if (senderIds.isEmpty()) {
+            return Map.of();
         }
-        return userRepository.findById(id)
-                .orElse(null);
+
+        return userRepository.findSummariesByIdIn(senderIds).stream()
+                .filter(user -> user.getId() != null)
+                .collect(Collectors.toMap(User::getId, user -> user, (first, ignored) -> first));
     }
 }
