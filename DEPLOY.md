@@ -1,105 +1,120 @@
 # Backend 배포 가이드
 
-이 repo는 백엔드 전용 repo입니다. 운영 실행 기준은 Docker 이미지와
-`docker-compose.prod.yaml`입니다.
+운영 배포는 **latest 태그를 쓰지 않고**, 로컬에서 태그가 붙은 Docker 이미지를
+빌드한 뒤 Docker Hub에 push하고 EC2에서 pull/run 합니다.
 
-## 구조
+## 기본 정보
 
-- 로컬 개발 env: `.env`
-- 운영 env 예시: `backend-app.env.example`
-- EC2 운영 env: `/etc/ktb/backend-app.env`
+- Docker Hub image: `youngjin179/ktb-backend:<TAG>`
+- MongoDB: `10.0.2.127:27017`
+- Redis: `10.0.2.157:6379`
+- Backend EC2: `10.0.2.238`
+- ALB: `http://public-ktb-alb-974381789.ap-northeast-2.elb.amazonaws.com`
+- EC2 env: `/etc/ktb/backend-app.env`
 - EC2 compose: `/home/ubuntu/ktb-chat-backend/docker-compose.prod.yaml`
-- 운영 이미지: `youngjin179/ktb-backend:1.0.0`
 
-운영에서는 로컬 `.env`를 쓰지 않습니다.
+## 1. 태그 설정
 
-## 1. Docker 이미지 빌드
+Backend repo root에서 실행합니다.
 
 ```bash
-cd apps/backend
-docker build -t youngjin179/ktb-backend:1.0.0 .
+export DOCKER_NS=youngjin179
+export TAG=$(git rev-parse --short HEAD)-smoke1
 ```
 
-## 2. Docker 이미지 push
+예:
 
-```bash
-docker push youngjin179/ktb-backend:1.0.0
+```text
+youngjin179/ktb-backend:abc1234-smoke1
 ```
 
-## 3. EC2 운영 env 준비
-
-Backend EC2에서 최초 1회만 설정합니다.
+## 2. Docker Hub 로그인
 
 ```bash
-sudo mkdir -p /etc/ktb
-sudo nano /etc/ktb/backend-app.env
-sudo chown root:root /etc/ktb/backend-app.env
-sudo chmod 600 /etc/ktb/backend-app.env
+docker login
 ```
 
-필수 키는 `backend-app.env.example`을 기준으로 채웁니다.
-
-## 4. compose 파일 배포
-
-로컬에서 실행합니다.
+## 3. 이미지 빌드/푸시
 
 ```bash
-cd apps/backend
+docker build \
+  -t $DOCKER_NS/ktb-backend:$TAG \
+  .
+
+docker push $DOCKER_NS/ktb-backend:$TAG
+```
+
+## 4. EC2 env 확인
+
+Backend EC2에서 `/etc/ktb/backend-app.env`를 관리합니다. 로컬 `.env`는 운영에
+쓰지 않습니다.
+
+필수 ALB origin:
+
+```env
+CORS_ALLOWED_ORIGINS=http://public-ktb-alb-974381789.ap-northeast-2.elb.amazonaws.com
+SOCKETIO_SERVER_ORIGIN=http://public-ktb-alb-974381789.ap-northeast-2.elb.amazonaws.com
+```
+
+확인:
+
+```bash
+sudo awk -F= '/^(CORS_ALLOWED_ORIGINS|SOCKETIO_SERVER_ORIGIN)=/ {print $1}' /etc/ktb/backend-app.env
+```
+
+## 5. compose 파일 배포
+
+```bash
 make deploy-compose DEPLOY_SERVERS=ktb-backend
 ```
 
-`make deploy-compose`는 아래 명령을 짧게 감싼 것입니다.
+`make deploy-compose`는 아래 명령의 wrapper입니다.
 
 ```bash
 rsync -az docker-compose.prod.yaml ktb-backend:/home/ubuntu/ktb-chat-backend/
 ```
 
-## 5. EC2에서 컨테이너 재실행
-
-로컬에서 실행합니다.
+## 6. EC2에서 새 이미지 실행
 
 ```bash
-cd apps/backend
+BACKEND_IMAGE=$DOCKER_NS/ktb-backend:$TAG \
 make compose-up-servers DEPLOY_SERVERS=ktb-backend
 ```
 
-`make compose-up-servers`는 EC2에서 아래 명령을 실행하는 wrapper입니다.
+직접 EC2에서 실행하려면:
 
 ```bash
+export TAG=<실제_TAG>
+sudo docker pull youngjin179/ktb-backend:$TAG
+
 cd /home/ubuntu/ktb-chat-backend
-sudo docker-compose -f docker-compose.prod.yaml up -d
+sudo env BACKEND_IMAGE=youngjin179/ktb-backend:$TAG \
+  docker-compose -f docker-compose.prod.yaml up -d
 ```
 
-직접 EC2에 접속해서 실행해도 됩니다.
+`docker-compose.prod.yaml`은 기본적으로 다음 포트를 publish합니다.
 
-## 6. 확인
+```text
+5001 -> 5001
+5002 -> 5002
+```
 
-Backend EC2에서 확인합니다.
+Prometheus가 backend HTTP 포트 `5001`을 보므로 `5001:5001`을 기준으로 둡니다.
+
+## 7. 확인
 
 ```bash
 sudo docker ps --filter name=backend-app
-curl http://localhost:8080/api/health
-python3 - <<'PY'
-import urllib.request
-url = "http://localhost:5002/socket.io/?EIO=4&transport=polling"
-with urllib.request.urlopen(url, timeout=5) as r:
-    print(r.status)
-    print(r.read(160))
-PY
+curl http://localhost:5001/actuator/health
+sudo docker logs -f backend-app
 ```
 
-정상 포트:
+## make는 왜 쓰나?
 
-```text
-0.0.0.0:8080->5001/tcp
-0.0.0.0:5002->5002/tcp
-```
+`make`는 Docker를 대체하지 않습니다. SSH/rsync/docker-compose 명령을 짧게
+부르는 wrapper입니다.
 
-## 왜 make를 쓰나?
-
-`make`는 필수가 아닙니다. 긴 SSH/rsync/docker-compose 명령을 짧게 부르는
-wrapper입니다.
-
-- 이미지를 새로 만들 때: `docker build`, `docker push`
-- 서버에서 실행할 때: `docker-compose up -d`
-- 반복 명령을 줄이고 싶을 때: `make deploy-compose`, `make compose-up-servers`
+- 이미지 생성: `docker build`
+- 이미지 업로드: `docker push`
+- EC2 실행: `docker-compose up -d`
+- 반복 명령 단축: `make deploy-compose`, `make compose-up-servers`
