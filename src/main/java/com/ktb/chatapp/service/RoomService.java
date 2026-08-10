@@ -125,6 +125,10 @@ public class RoomService {
     }
 
     public Room createRoom(CreateRoomRequest createRoomRequest, String name) {
+        return createRoomWithResponse(createRoomRequest, name).room();
+    }
+
+    public RoomOperationResult createRoomWithResponse(CreateRoomRequest createRoomRequest, String name) {
         User creator = userRepository.findByEmail(name)
             .orElseThrow(() -> new RuntimeException("사용자를 찾을 수 없습니다: " + name));
 
@@ -144,11 +148,11 @@ public class RoomService {
         try {
             RoomResponse roomResponse = mapToRoomResponse(savedRoom, name);
             eventPublisher.publishEvent(new RoomCreatedEvent(this, roomResponse));
+            return new RoomOperationResult(savedRoom, roomResponse);
         } catch (Exception e) {
             log.error("roomCreated 이벤트 발행 실패", e);
+            return new RoomOperationResult(savedRoom, null);
         }
-        
-        return savedRoom;
     }
 
     public Optional<Room> findRoomById(String roomId) {
@@ -156,9 +160,13 @@ public class RoomService {
     }
 
     public Room joinRoom(String roomId, String password, String name) {
+        return joinRoomWithResponse(roomId, password, name).room();
+    }
+
+    public RoomOperationResult joinRoomWithResponse(String roomId, String password, String name) {
         Optional<Room> roomOpt = roomRepository.findById(roomId);
         if (roomOpt.isEmpty()) {
-            return null;
+            return new RoomOperationResult(null, null);
         }
 
         Room room = roomOpt.get();
@@ -183,20 +191,54 @@ public class RoomService {
         try {
             RoomResponse roomResponse = mapToRoomResponse(room, name);
             eventPublisher.publishEvent(new RoomUpdatedEvent(this, roomId, roomResponse));
+            return new RoomOperationResult(room, roomResponse);
         } catch (Exception e) {
             log.error("roomUpdate 이벤트 발행 실패", e);
+            return new RoomOperationResult(room, null);
         }
-
-        return room;
     }
 
-    private RoomResponse mapToRoomResponse(Room room, String name) {
+    public record RoomOperationResult(Room room, RoomResponse response) {
+    }
+
+    public RoomResponse mapToRoomResponse(Room room, String name) {
         if (room == null) return null;
 
-        Map<String, Integer> recentMessageCounts = room.getId() == null
-                ? Map.of()
-                : Map.of(room.getId(), recentMessageCounter.countRecentMessages(room.getId()));
-        return mapToRoomResponse(room, name, loadUsers(List.of(room)), recentMessageCounts);
+        Map<String, User> usersById = loadUsers(List.of(room));
+        User creator = room.getCreator() == null ? null : usersById.get(room.getCreator());
+        if (creator == null) {
+            throw new RuntimeException("Creator not found for room " + room.getId());
+        }
+
+        Set<String> participantIds = room.getParticipantIds() == null
+                ? Set.of()
+                : room.getParticipantIds();
+        List<UserResponse> participants = participantIds.stream()
+                .map(userId -> {
+                    User user = usersById.get(userId);
+                    if (user == null) {
+                        log.warn("Participant not found: roomId={}, userId={}", room.getId(), userId);
+                    }
+                    return user;
+                })
+                .filter(Objects::nonNull)
+                .map(UserResponse::from)
+                .toList();
+
+        int recentMessageCount = room.getId() == null
+                ? 0
+                : recentMessageCounter.countRecentMessages(room.getId());
+
+        return RoomResponse.builder()
+                .id(room.getId())
+                .name(room.getName())
+                .hasPassword(room.isHasPassword())
+                .creator(UserResponse.from(creator))
+                .participants(participants)
+                .createdAtDateTime(room.getCreatedAt() != null ? room.getCreatedAt() : LocalDateTime.now())
+                .isCreator(room.getCreator().equals(name))
+                .recentMessageCount(recentMessageCount)
+                .build();
     }
 
     private Map<String, User> loadUsers(List<Room> rooms) {
@@ -214,7 +256,7 @@ public class RoomService {
             return Map.of();
         }
 
-        return userRepository.findAllById(userIds).stream()
+        return userRepository.findSummariesByIdIn(userIds).stream()
                 .filter(user -> user.getId() != null)
                 .collect(Collectors.toMap(User::getId, user -> user, (first, ignored) -> first));
     }
