@@ -39,8 +39,15 @@ public class MessageReadStatusService {
      * @param lastReadMessageId 그 방에서 유저가 확인한 가장 마지막(최신) 메시지 ID
      * @param lastReadAt        그 메시지의 timestamp (워터마크 비교 기준)
      */
-    public void updateReadStatus(String roomId, String userId, String lastReadMessageId, LocalDateTime lastReadAt) {
-        if (roomId == null || roomId.isBlank() || lastReadMessageId == null || lastReadMessageId.isBlank()) {
+    public void updateReadStatus(
+            String roomId,
+            String userId,
+            String lastReadMessageId,
+            LocalDateTime lastReadAt) {
+        if (roomId == null || roomId.isBlank()
+                || userId == null || userId.isBlank()
+                || lastReadMessageId == null || lastReadMessageId.isBlank()
+                || lastReadAt == null) {
             return;
         }
 
@@ -48,21 +55,18 @@ public class MessageReadStatusService {
             // 워터마크가 "전진"할 때만 갱신되도록 조건을 건다.
             // 네트워크 지연 등으로 read-ack가 순서 뒤바뀌어 늦게 도착해도,
             // 이미 반영된 더 최신 워터마크를 과거 값으로 덮어쓰지 않기 위함이다.
-            Query query = Query.query(
-                    Criteria.where("room").is(roomId)
-                            .and("user").is(userId)
-                            .orOperator(
-                                    Criteria.where("lastReadAt").lt(lastReadAt),
-                                    Criteria.where("lastReadAt").exists(false)
-                            )
-            );
-
+            Criteria notBehind = new Criteria().orOperator(
+                    Criteria.where("lastReadAt").lt(lastReadAt),
+                    Criteria.where("lastReadAt").exists(false));
+            Query query = Query.query(new Criteria().andOperator(
+                    Criteria.where("room").is(roomId),
+                    Criteria.where("user").is(userId),
+                    notBehind));
             Update update = new Update()
                     .set("lastReadMessageId", lastReadMessageId)
                     .set("lastReadAt", lastReadAt)
                     .setOnInsert("room", roomId)
                     .setOnInsert("user", userId);
-
             mongoTemplate.upsert(query, update, ReadReceipt.class);
 
             log.debug("Read watermark advanced for room {} by user {} to message {}",
