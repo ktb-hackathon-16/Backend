@@ -55,7 +55,7 @@ public class RoomService {
 
             Page<Room> roomPage = roomRepository.findRooms(pageRequest);
             List<Room> rooms = roomPage.getContent();
-            Map<String, User> usersById = loadUsers(rooms);
+            Map<String, User> creatorsById = loadCreators(rooms);
             List<String> roomIds = rooms.stream()
                     .map(Room::getId)
                     .filter(Objects::nonNull)
@@ -65,7 +65,7 @@ public class RoomService {
             recentMessageCounter.warmupRecentMessagesByRoomIds(roomIds);
 
             List<RoomResponse> roomResponses = rooms.stream()
-                .map(room -> mapToRoomResponse(room, name, usersById, recentMessageCounts))
+                .map(room -> mapToRoomListResponse(room, name, creatorsById, recentMessageCounts))
                 .collect(Collectors.toList());
 
             PageMetadata metadata = PageMetadata.builder()
@@ -286,22 +286,33 @@ public class RoomService {
                 .collect(Collectors.toMap(User::getId, user -> user, (first, ignored) -> first));
     }
 
-    private RoomResponse mapToRoomResponse(
+    private Map<String, User> loadCreators(List<Room> rooms) {
+        Set<String> creatorIds = rooms.stream()
+                .map(Room::getCreator)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        if (creatorIds.isEmpty()) {
+            return Map.of();
+        }
+
+        return userRepository.findSummariesByIdIn(creatorIds).stream()
+                .filter(user -> user.getId() != null)
+                .collect(Collectors.toMap(User::getId, user -> user, (first, ignored) -> first));
+    }
+
+    private RoomResponse mapToRoomListResponse(
             Room room,
             String name,
-            Map<String, User> usersById,
+            Map<String, User> creatorsById,
             Map<String, Integer> recentMessageCounts) {
         if (room == null) return null;
 
-        User creator = room.getCreator() == null ? null : usersById.get(room.getCreator());
+        User creator = room.getCreator() == null ? null : creatorsById.get(room.getCreator());
 
         Set<String> participantIds = room.getParticipantIds() == null
                 ? Set.of()
                 : room.getParticipantIds();
-        List<User> participants = participantIds.stream()
-            .map(usersById::get)
-            .filter(Objects::nonNull)
-            .toList();
 
         int recentMessageCount = room.getId() == null
                 ? 0
@@ -316,17 +327,17 @@ public class RoomService {
                 .name(creator.getName() != null ? creator.getName() : "알 수 없음")
                 .email(creator.getEmail() != null ? creator.getEmail() : "")
                 .build() : null)
-            .participants(participants.stream()
-                .filter(p -> p != null && p.getId() != null)
-                .map(p -> UserResponse.builder()
-                    .id(p.getId())
-                    .name(p.getName() != null ? p.getName() : "알 수 없음")
-                    .email(p.getEmail() != null ? p.getEmail() : "")
-                    .build())
-                .collect(Collectors.toList()))
-            .createdAtDateTime(room.getCreatedAt())
-            .isCreator(creator != null && creator.getId().equals(name))
+            .participants(toLightweightParticipants(participantIds))
+            .createdAtDateTime(room.getCreatedAt() != null ? room.getCreatedAt() : LocalDateTime.now())
+            .isCreator(creator != null && Objects.equals(creator.getEmail(), name))
             .recentMessageCount(recentMessageCount)
             .build();
+    }
+
+    private List<UserResponse> toLightweightParticipants(Set<String> participantIds) {
+        return participantIds.stream()
+                .filter(Objects::nonNull)
+                .map(userId -> UserResponse.builder().id(userId).build())
+                .collect(Collectors.toList());
     }
 }

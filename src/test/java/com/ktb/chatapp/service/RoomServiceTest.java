@@ -23,6 +23,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -53,16 +54,10 @@ class RoomServiceTest {
                 .name("creator")
                 .email("creator@example.com")
                 .build();
-        User participant = User.builder()
-                .id("user-2")
-                .name("participant")
-                .email("participant@example.com")
-                .build();
-
         when(roomRepository.findRooms(pageRequest))
                 .thenReturn(new PageImpl<>(List.of(room), pageRequest, 5));
-        when(userRepository.findSummariesByIdIn(Set.of("user-1", "user-2")))
-                .thenReturn(List.of(creator, participant));
+        when(userRepository.findSummariesByIdIn(Set.of("user-1")))
+                .thenReturn(List.of(creator));
         when(recentMessageCounter.countRecentMessagesByRoomIds(List.of("room-1")))
                 .thenReturn(Map.of("room-1", 3));
 
@@ -72,6 +67,14 @@ class RoomServiceTest {
         assertEquals(1, response.getData().size());
         assertEquals("room-1", response.getData().getFirst().getId());
         assertEquals(3, response.getData().getFirst().getRecentMessageCount());
+        assertEquals(2, response.getData().getFirst().getParticipants().size());
+        assertTrue(response.getData().getFirst().getParticipants().stream()
+                .allMatch(participant -> participant.getName() == null && participant.getEmail() == null));
+        assertTrue(response.getData().getFirst().getParticipants().stream()
+                .anyMatch(participant -> "user-1".equals(participant.getId())));
+        assertTrue(response.getData().getFirst().getParticipants().stream()
+                .anyMatch(participant -> "user-2".equals(participant.getId())));
+        assertEquals("creator", response.getData().getFirst().getCreator().getName());
         assertEquals(5, response.getMetadata().getTotal());
         assertEquals(1, response.getMetadata().getPage());
         assertEquals(2, response.getMetadata().getPageSize());
@@ -81,6 +84,8 @@ class RoomServiceTest {
         assertEquals("createdAt", response.getMetadata().getSort().getField());
         assertEquals("desc", response.getMetadata().getSort().getOrder());
         verify(roomRepository).findRooms(pageRequest);
+        verify(userRepository).findSummariesByIdIn(Set.of("user-1"));
+        verifyNoMoreInteractions(userRepository);
         verify(recentMessageCounter).warmupRecentMessagesByRoomIds(List.of("room-1"));
     }
 }
