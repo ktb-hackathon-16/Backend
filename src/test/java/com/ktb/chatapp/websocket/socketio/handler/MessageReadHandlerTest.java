@@ -14,6 +14,7 @@ import com.ktb.chatapp.repository.UserRepository;
 import com.ktb.chatapp.service.MessageReadStatusService;
 import com.ktb.chatapp.websocket.socketio.SocketUser;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
@@ -97,7 +98,9 @@ class MessageReadHandlerTest {
         assertEquals("user-1", response.getUserId());
         assertEquals("room-1", response.getRoomId());
         assertEquals("message-1", response.getLastReadMessageId());
-        assertEquals(lastReadAt, response.getLastReadAt());
+        // [FIX] response.getLastReadAt()은 epoch millis (long)이므로 비교 시에도 epoch millis로 변환.
+        long expectedEpochMillis = lastReadAt.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
+        assertEquals(expectedEpochMillis, response.getLastReadAt());
     }
 
     private MarkAsReadRequest request(String roomId, String lastReadMessageId) {

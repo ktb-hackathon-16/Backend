@@ -86,8 +86,9 @@ public class MessageReadHandler {
             messageReadStatusService.updateReadStatus(
                     roomId, userId, data.getLastReadMessageId(), lastReadMessage.getTimestamp());
 
+            // [FIX] MessagesReadResponse의 lastReadAt은 epoch millis (long).
             MessagesReadResponse response = new MessagesReadResponse(
-                    userId, roomId, data.getLastReadMessageId(), lastReadMessage.getTimestamp());
+                    userId, roomId, data.getLastReadMessageId(), lastReadMessage.toTimestampMillis());
 
             // Broadcast to room
             socketIOServer.getRoomOperations(roomId)

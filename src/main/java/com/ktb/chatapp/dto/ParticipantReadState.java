@@ -1,7 +1,5 @@
 package com.ktb.chatapp.dto;
 
-import java.time.LocalDateTime;
-
 /**
  * [NEW FILE] dto/ParticipantReadState.java
  *
@@ -11,5 +9,6 @@ import java.time.LocalDateTime;
  * 새 소켓 이벤트를 추가하지 않고 기존 joinRoomSuccess 응답에 얹는 방식이라
  * socket-contract의 이벤트 개수(SERVER_EMIT 9개)는 그대로 유지된다.
  */
-public record ParticipantReadState(String userId, String lastReadMessageId, LocalDateTime lastReadAt) {
+// [FIX] lastReadAt을 epoch millis (long)로 변경. MessagesReadResponse와 일관성 유지.
+public record ParticipantReadState(String userId, String lastReadMessageId, long lastReadAt) {
 }

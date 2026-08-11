@@ -1,6 +1,7 @@
 package com.ktb.chatapp.model;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -45,4 +46,16 @@ public class ReadReceipt {
 
     // 가장 마지막으로 읽은 시각 - 메시지 timestamp와 비교해 안읽음 여부를 계산하는 기준
     private LocalDateTime lastReadAt;
+
+    /**
+     * [ADDED] lastReadAt을 epoch millis로 변환.
+     * 프론트에 전송할 때 JSON 직렬화를 일관되게 하기 위해 사용.
+     * Message.toTimestampMillis()와 같은 방식으로 구현.
+     */
+    public long toLastReadAtMillis() {
+        if (lastReadAt == null) {
+            return 0L;
+        }
+        return lastReadAt.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
+    }
 }
