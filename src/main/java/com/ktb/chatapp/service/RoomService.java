@@ -8,7 +8,6 @@ import com.ktb.chatapp.model.User;
 import com.ktb.chatapp.repository.RoomRepository;
 import com.ktb.chatapp.repository.UserRepository;
 import java.time.LocalDateTime;
-import java.util.Comparator;
 import java.util.HashSet;
 import java.util.HashMap;
 import java.util.List;
@@ -20,6 +19,9 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -28,6 +30,9 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class RoomService {
 
+    private static final int DEFAULT_ROOM_PAGE_SIZE = 50;
+    private static final int MAX_ROOM_PAGE_SIZE = 100;
+
     private final RoomRepository roomRepository;
     private final UserRepository userRepository;
     private final RecentMessageCounter recentMessageCounter;
@@ -35,10 +40,21 @@ public class RoomService {
     private final ApplicationEventPublisher eventPublisher;
 
     public RoomsResponse getAllRooms(String name) {
+        return getAllRooms(name, 0, DEFAULT_ROOM_PAGE_SIZE);
+    }
+
+    public RoomsResponse getAllRooms(String name, int page, int limit) {
 
         try {
-            // 전체 방을 조회해 최신순으로 정렬한다
-            List<Room> rooms = roomRepository.findAll();
+            int pageNumber = Math.max(page, 0);
+            int pageSize = normalizeRoomPageSize(limit);
+            PageRequest pageRequest = PageRequest.of(
+                    pageNumber,
+                    pageSize,
+                    Sort.by(Sort.Direction.DESC, "createdAt"));
+
+            Page<Room> roomPage = roomRepository.findRooms(pageRequest);
+            List<Room> rooms = roomPage.getContent();
             Map<String, User> usersById = loadUsers(rooms);
             List<String> roomIds = rooms.stream()
                     .map(Room::getId)
@@ -50,18 +66,19 @@ public class RoomService {
 
             List<RoomResponse> roomResponses = rooms.stream()
                 .map(room -> mapToRoomResponse(room, name, usersById, recentMessageCounts))
-                .sorted(Comparator.comparing(
-                    RoomResponse::getCreatedAtDateTime,
-                    Comparator.nullsLast(Comparator.reverseOrder())))
                 .collect(Collectors.toList());
 
             PageMetadata metadata = PageMetadata.builder()
-                .total(roomResponses.size())
-                .page(0)
-                .pageSize(roomResponses.size())
-                .totalPages(1)
-                .hasMore(false)
+                .total(roomPage.getTotalElements())
+                .page(pageNumber)
+                .pageSize(pageSize)
+                .totalPages(roomPage.getTotalPages())
+                .hasMore(roomPage.hasNext())
                 .currentCount(roomResponses.size())
+                .sort(PageMetadata.SortInfo.builder()
+                        .field("createdAt")
+                        .order("desc")
+                        .build())
                 .build();
 
             return RoomsResponse.builder()
@@ -77,6 +94,13 @@ public class RoomService {
                 .data(List.of())
                 .build();
         }
+    }
+
+    private int normalizeRoomPageSize(int limit) {
+        if (limit <= 0) {
+            return DEFAULT_ROOM_PAGE_SIZE;
+        }
+        return Math.min(limit, MAX_ROOM_PAGE_SIZE);
     }
 
     public HealthResponse getHealthStatus() {

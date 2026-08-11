@@ -1,6 +1,8 @@
 package com.ktb.chatapp.repository;
 
 import com.ktb.chatapp.model.Room;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.data.mongodb.repository.Query;
 import org.springframework.data.mongodb.repository.Update;
@@ -10,6 +12,9 @@ import java.util.Optional;
 
 @Repository
 public interface RoomRepository extends MongoRepository<Room, String> {
+
+    @Query("{}")
+    Page<Room> findRooms(Pageable pageable);
 
     // 가장 최근에 생성된 방 조회 (Health Check용)
     @Query(value = "{}", sort = "{ 'createdAt': -1 }")
