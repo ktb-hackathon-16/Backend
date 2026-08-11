@@ -9,6 +9,7 @@ import com.ktb.chatapp.model.User;
 import com.ktb.chatapp.repository.MessageRepository;
 import com.ktb.chatapp.repository.UserRepository;
 import com.ktb.chatapp.service.MessageReadStatusService;
+import com.ktb.chatapp.service.RecentMessageCache;
 import jakarta.annotation.Nullable;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -38,6 +39,7 @@ public class MessageLoader {
     private final UserRepository userRepository;
     private final MessageResponseMapper messageResponseMapper;
     private final MessageReadStatusService messageReadStatusService;
+    private final RecentMessageCache recentMessageCache;
 
     /**
      * 메시지 로드
@@ -85,11 +87,17 @@ public class MessageLoader {
     ) {
         int fetchSize = limit + 1;
 
-        List<Message> fetchedMessages = messageRepository.findOlderMessages(
-                roomId,
-                cursor,
-                fetchSize
-        );
+        List<Message> fetchedMessages = recentMessageCache
+                .findOlderMessages(roomId, cursor, fetchSize)
+                .orElseGet(() -> {
+                    List<Message> messages = messageRepository.findOlderMessages(
+                            roomId,
+                            cursor,
+                            fetchSize
+                    );
+                    recentMessageCache.put(roomId, messages);
+                    return messages;
+                });
 
         boolean hasMore = fetchedMessages.size() > limit;
         int responseSize = Math.min(fetchedMessages.size(), limit);

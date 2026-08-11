@@ -11,8 +11,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.connection.RedisZSetCommands;
 import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -25,7 +25,6 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @Slf4j
-@RequiredArgsConstructor
 public class RecentMessageCounter {
 
     static final Duration RECENT_WINDOW = Duration.ofMinutes(30);
@@ -48,6 +47,23 @@ public class RecentMessageCounter {
 
     private final MessageRepository messageRepository;
     private final StringRedisTemplate redisTemplate;
+    private final RecentMessageCache recentMessageCache;
+
+    @Autowired
+    public RecentMessageCounter(
+            MessageRepository messageRepository,
+            StringRedisTemplate redisTemplate,
+            RecentMessageCache recentMessageCache) {
+        this.messageRepository = messageRepository;
+        this.redisTemplate = redisTemplate;
+        this.recentMessageCache = recentMessageCache;
+    }
+
+    public RecentMessageCounter(
+            MessageRepository messageRepository,
+            StringRedisTemplate redisTemplate) {
+        this(messageRepository, redisTemplate, null);
+    }
 
     public int countRecentMessages(String roomId) {
         LocalDateTime since = LocalDateTime.now().minus(RECENT_WINDOW);
@@ -84,6 +100,10 @@ public class RecentMessageCounter {
         }
 
         try {
+            if (recentMessageCache != null) {
+                recentMessageCache.put(message.getRoomId(), List.of(message));
+            }
+
             LocalDateTime since = LocalDateTime.now().minus(RECENT_WINDOW);
             redisTemplate.execute(
                     RECORD_RECENT_MESSAGE,
