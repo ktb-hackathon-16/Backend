@@ -1,11 +1,13 @@
 package com.ktb.chatapp.storage;
 
 /**
- * 스토리지 key 규약: {@code profiles/<name>}(공개), {@code chat/<name>}(인가 필요).
+ * 스토리지 key 규약: {@code profiles/<name>}(구 프로필), {@code media/profiles/...}(CDN 공개),
+ * {@code chat/<name>}(인가 필요).
  */
 public final class StorageKey {
 
     private static final String PROFILE_PREFIX = "profiles/";
+    private static final String MEDIA_PROFILE_PREFIX = "media/profiles/";
     private static final String CHAT_PREFIX = "chat/";
 
     private StorageKey() {
@@ -15,12 +17,20 @@ public final class StorageKey {
         return PROFILE_PREFIX + fileName;
     }
 
+    public static String mediaProfile(String userId, String fileName) {
+        return MEDIA_PROFILE_PREFIX + userId + "/" + fileName;
+    }
+
     public static String chat(String fileName) {
         return CHAT_PREFIX + fileName;
     }
 
     public static boolean isProfile(String key) {
         return key != null && key.startsWith(PROFILE_PREFIX);
+    }
+
+    public static boolean isMedia(String key) {
+        return key != null && key.startsWith("media/");
     }
 
     public static boolean isChat(String key) {

@@ -35,6 +35,14 @@ public class File {
 
     private String path;
 
+    private String previewPath;
+
+    private long previewSize;
+
+    private String thumbnailPath;
+
+    private long thumbnailSize;
+
     @Field("user")
     private String user;
 

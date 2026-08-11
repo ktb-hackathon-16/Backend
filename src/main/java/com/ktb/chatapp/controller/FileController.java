@@ -78,6 +78,10 @@ public class FileController {
                 fileData.put("originalname", result.getFile().getOriginalname());
                 fileData.put("mimetype", result.getFile().getMimetype());
                 fileData.put("size", result.getFile().getSize());
+                fileData.put("previewUrl", com.ktb.chatapp.service.FileUrl.publicMediaOf(result.getFile().getPreviewPath()));
+                fileData.put("previewSize", result.getFile().getPreviewSize());
+                fileData.put("thumbnailUrl", com.ktb.chatapp.service.FileUrl.publicMediaOf(result.getFile().getThumbnailPath()));
+                fileData.put("thumbnailSize", result.getFile().getThumbnailSize());
                 fileData.put("uploadDate", result.getFile().getUploadDate());
                 
                 response.put("file", fileData);

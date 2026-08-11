@@ -5,7 +5,6 @@ import com.ktb.chatapp.dto.UpdateProfileRequest;
 import com.ktb.chatapp.dto.UserResponse;
 import com.ktb.chatapp.model.User;
 import com.ktb.chatapp.repository.UserRepository;
-import com.ktb.chatapp.storage.StoragePort;
 import com.ktb.chatapp.util.FileUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,8 +23,7 @@ import java.util.List;
 public class UserService {
 
     private final UserRepository userRepository;
-    private final FileService fileService;
-    private final StoragePort storagePort;
+    private final ImageVariantService imageVariantService;
 
     @Value("${app.profile.image.max-size:5242880}") // 5MB
     private long maxProfileImageSize;
@@ -79,8 +77,8 @@ public class UserService {
             deleteOldProfileImage(user.getProfileImage());
         }
 
-        // 새 파일 저장 (보안 검증 포함)
-        String profileImageKey = fileService.storeFile(file, "profiles");
+        // 새 파일 저장 (프로필은 CDN으로 직접 내려줄 수 있는 media key를 사용)
+        String profileImageKey = imageVariantService.storeProfileAvatar(file, user.getId());
 
         // DB에는 key만 저장한다 — URL은 응답 경계에서 조립된다
         user.setProfileImage(profileImageKey);
@@ -140,7 +138,7 @@ public class UserService {
      */
     private void deleteOldProfileImage(String profileImageKey) {
         try {
-            storagePort.delete(profileImageKey);
+            imageVariantService.deleteProfileImageSet(profileImageKey);
             log.info("기존 프로필 이미지 삭제 완료: {}", profileImageKey);
         } catch (RuntimeException e) {
             log.warn("기존 프로필 이미지 삭제 실패: {}", e.getMessage());

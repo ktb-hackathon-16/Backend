@@ -101,6 +101,10 @@ public class MessageResponseMapper {
                     .originalname(file.getOriginalname())
                     .mimetype(file.getMimetype())
                     .size(file.getSize())
+                    .previewUrl(FileUrl.publicMediaOf(file.getPreviewPath()))
+                    .previewSize(file.getPreviewSize())
+                    .thumbnailUrl(FileUrl.publicMediaOf(file.getThumbnailPath()))
+                    .thumbnailSize(file.getThumbnailSize())
                     .build());
         }
 
