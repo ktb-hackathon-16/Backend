@@ -31,6 +31,8 @@ public class FileUtil {
         Map.entry("application/vnd.openxmlformats-officedocument.wordprocessingml.document", Arrays.asList("docx"))
     );
 
+    private static final Set<String> IMAGE_EXTENSIONS = Set.of("jpg", "jpeg", "png", "gif", "webp");
+
     private static final Map<String, Long> FILE_SIZE_LIMITS = Map.of(
         "image", 5L * 1024 * 1024,       // 5MB
         "video", 5L * 1024 * 1024,       // 5MB
@@ -48,7 +50,7 @@ public class FileUtil {
      */
     public static void validateFile(MultipartFile file) {
         if (file == null || file.isEmpty()) {
-            throw new RuntimeException("파일이 비어있습니다.");
+            throw new IllegalArgumentException("파일이 비어있습니다.");
         }
 
         validateUploadMetadata(file.getOriginalFilename(), file.getContentType(), file.getSize());
@@ -56,26 +58,28 @@ public class FileUtil {
 
     public static void validateUploadMetadata(String originalFilename, String contentType, long size) {
         if (originalFilename == null || originalFilename.trim().isEmpty()) {
-            throw new RuntimeException("파일명이 올바르지 않습니다.");
+            throw new IllegalArgumentException("파일명이 올바르지 않습니다.");
         }
 
         // 파일명 길이 검증 (UTF-8 바이트 기준 255바이트)
         int filenameBytes = originalFilename.getBytes(StandardCharsets.UTF_8).length;
         if (filenameBytes > 255) {
-            throw new RuntimeException("파일명이 너무 깁니다.");
+            throw new IllegalArgumentException("파일명이 너무 깁니다.");
         }
 
         // MIME 타입 검증
         if (contentType == null || !ALLOWED_TYPES.containsKey(contentType)) {
-            throw new RuntimeException("지원하지 않는 파일 형식입니다.");
+            throw new IllegalArgumentException("지원하지 않는 파일 형식입니다.");
         }
 
-        // 확장자-MIME 일치 검증
         String extension = getFileExtension(originalFilename).toLowerCase();
-        List<String> allowedExtensions = ALLOWED_TYPES.get(contentType);
-        if (allowedExtensions == null || !allowedExtensions.contains(extension)) {
+        boolean validExtension = contentType.startsWith("image/")
+                ? IMAGE_EXTENSIONS.contains(extension)
+                : ALLOWED_TYPES.getOrDefault(contentType, List.of()).contains(extension);
+
+        if (!validExtension) {
             String fileType = getFileType(contentType);
-            throw new RuntimeException(fileType + " 확장자가 올바르지 않습니다.");
+            throw new IllegalArgumentException(fileType + " 확장자가 올바르지 않습니다.");
         }
 
         // 타입별 크기 제한 검증
@@ -83,13 +87,13 @@ public class FileUtil {
         long limit = FILE_SIZE_LIMITS.getOrDefault(type, FILE_SIZE_LIMITS.get("application"));
         
         if (size <= 0) {
-            throw new RuntimeException("파일이 비어있습니다.");
+            throw new IllegalArgumentException("파일이 비어있습니다.");
         }
 
         if (size > limit) {
             int limitInMB = (int) (limit / 1024 / 1024);
             String fileType = getFileType(contentType);
-            throw new RuntimeException(fileType + " 파일은 " + limitInMB + "MB를 초과할 수 없습니다.");
+            throw new IllegalArgumentException(fileType + " 파일은 " + limitInMB + "MB를 초과할 수 없습니다.");
         }
     }
 
