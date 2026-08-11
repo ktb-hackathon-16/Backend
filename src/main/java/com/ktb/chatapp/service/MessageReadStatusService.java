@@ -63,10 +63,13 @@ public class MessageReadStatusService {
                     .setOnInsert("room", roomId)
                     .setOnInsert("user", userId);
 
-            mongoTemplate.upsert(query, update, ReadReceipt.class);
+            var result = mongoTemplate.upsert(query, update, ReadReceipt.class);
 
-            log.debug("Read watermark advanced for room {} by user {} to message {}",
-                    roomId, userId, lastReadMessageId);
+            // matched=0 && upsertedId=null 이면 조건(lastReadAt < 새 값)에 걸려 스킵된 것 —
+            // 이미 더 최신 워터마크가 있다는 뜻이므로 정상이다.
+            log.info("Read watermark upsert: room={} user={} message={} matched={} modified={} upsertedId={}",
+                    roomId, userId, lastReadMessageId,
+                    result.getMatchedCount(), result.getModifiedCount(), result.getUpsertedId());
         } catch (Exception e) {
             log.error("Read status update error for room {} user {}", roomId, userId, e);
         }

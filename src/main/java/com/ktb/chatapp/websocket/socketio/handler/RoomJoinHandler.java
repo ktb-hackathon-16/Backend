@@ -120,11 +120,15 @@ public class RoomJoinHandler {
             // [ADDED] handler/RoomJoinHandler.java: 참가자별 읽음 워터마크 스냅샷 조회.
             // 프론트는 이 값으로 room.readReceipts를 초기화하고, 이후로는
             // messagesRead 브로드캐스트(MessageReadHandler)만으로 갱신한다.
+            // [FIX] lastReadAt은 epoch millis로 변환해서 내보낸다 (dto/ParticipantReadState 주석 참고).
             List<ParticipantReadState> participantReadStates = readReceiptRepository.findByRoomId(roomId)
                     .stream()
                     .map(receipt -> new ParticipantReadState(
-                            receipt.getUserId(), receipt.getLastReadMessageId(), receipt.getLastReadAt()))
+                            receipt.getUserId(), receipt.getLastReadMessageId(), receipt.toLastReadAtMillis()))
                     .toList();
+
+            log.info("Join room {}: participantReadStates snapshot = {} entries",
+                    roomId, participantReadStates.size());
 
             JoinRoomSuccessResponse response = JoinRoomSuccessResponse.builder()
                 .roomId(roomId)

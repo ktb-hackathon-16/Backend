@@ -599,9 +599,9 @@ components:
             type: string
             description: 그 방에서 유저가 가장 마지막으로 읽은 메시지 ID
           lastReadAt:
-            type: string
-            format: date-time
-            description: lastReadMessageId의 timestamp (워터마크 비교 기준)
+            type: integer
+            format: int64
+            description: lastReadMessageId의 timestamp (epoch millis, 워터마크 비교 기준)
         required:
           - userId
           - roomId
@@ -1048,8 +1048,9 @@ components:
               lastReadMessageId:
                 type: string
               lastReadAt:
-                type: string
-                format: date-time
+                type: integer
+                format: int64
+                description: epoch millis (아직 읽은 적 없으면 0)
           description: 참가자별 현재 읽음 워터마크 스냅샷
       required:
         - roomId

@@ -97,7 +97,9 @@ class MessageReadHandlerTest {
         assertEquals("user-1", response.getUserId());
         assertEquals("room-1", response.getRoomId());
         assertEquals("message-1", response.getLastReadMessageId());
-        assertEquals(lastReadAt, response.getLastReadAt());
+        // [CHANGED] 브로드캐스트 lastReadAt은 epoch millis(long)로 나간다.
+        // LocalDateTime을 그대로 보내면 프론트에서 Invalid Date가 되기 때문.
+        assertEquals(message.toTimestampMillis(), response.getLastReadAt());
     }
 
     private MarkAsReadRequest request(String roomId, String lastReadMessageId) {

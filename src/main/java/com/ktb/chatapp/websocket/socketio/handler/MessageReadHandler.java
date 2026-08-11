@@ -86,8 +86,15 @@ public class MessageReadHandler {
             messageReadStatusService.updateReadStatus(
                     roomId, userId, data.getLastReadMessageId(), lastReadMessage.getTimestamp());
 
+            // [FIX] 브로드캐스트에는 epoch millis로 변환해 내보낸다.
+            // LocalDateTime을 그대로 보내면 socket.io Jackson이 배열로 직렬화해서
+            // 프론트의 new Date(...)가 Invalid Date가 된다. 자세한 설명은
+            // dto/MessagesReadResponse.java 주석 참고.
             MessagesReadResponse response = new MessagesReadResponse(
-                    userId, roomId, data.getLastReadMessageId(), lastReadMessage.getTimestamp());
+                    userId, roomId, data.getLastReadMessageId(), lastReadMessage.toTimestampMillis());
+
+            log.info("Read watermark: room={} user={} -> message={} at={}",
+                    roomId, userId, data.getLastReadMessageId(), response.getLastReadAt());
 
             // Broadcast to room
             socketIOServer.getRoomOperations(roomId)

@@ -45,4 +45,17 @@ public class ReadReceipt {
 
     // 가장 마지막으로 읽은 시각 - 메시지 timestamp와 비교해 안읽음 여부를 계산하는 기준
     private LocalDateTime lastReadAt;
+
+    /**
+     * 워터마크를 프론트로 내보낼 때 쓰는 epoch millis 변환.
+     * Message.toTimestampMillis()와 동일한 규칙(systemDefault 존)을 쓴다 —
+     * 프론트가 message.timestamp와 이 값을 그대로 숫자 비교하기 때문에
+     * 두 변환이 반드시 같은 기준이어야 한다.
+     */
+    public long toLastReadAtMillis() {
+        if (lastReadAt == null) {
+            return 0L;
+        }
+        return lastReadAt.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
+    }
 }
