@@ -839,6 +839,23 @@ components:
       required:
         - room
 
+    MessageCursor:
+      type: object
+      description: timestamp와 messageId를 함께 사용하는 메시지 keyset cursor
+      properties:
+        timestamp:
+          type: integer
+          format: int64
+          description: cursor 메시지의 타임스탬프 (milliseconds)
+          example: 1699999999999
+        messageId:
+          type: string
+          description: timestamp가 같은 메시지의 순서를 구분하는 메시지 ID
+          example: '507f1f77bcf86cd799439011'
+      required:
+        - timestamp
+        - messageId
+
     FetchMessagesRequest:
       type: object
       properties:
@@ -854,8 +871,12 @@ components:
         before:
           type: integer
           format: int64
-          description: 이전 메시지 타임스탬프 (milliseconds)
+          deprecated: true
+          description: 기존 클라이언트 호환용 이전 메시지 타임스탬프 (milliseconds)
           example: 1699999999999
+        cursor:
+          $ref: '#/components/schemas/MessageCursor'
+          description: 이 cursor보다 오래된 메시지를 조회한다. before보다 우선한다.
       required:
         - roomId
 
@@ -1030,6 +1051,11 @@ components:
         hasMore:
           type: boolean
           description: 더 많은 메시지 존재 여부
+        nextCursor:
+          oneOf:
+            - $ref: '#/components/schemas/MessageCursor'
+            - type: 'null'
+          description: 다음 이전 메시지 페이지 조회에 사용할 cursor. 마지막 페이지이면 null
         activeStreams:
           type: array
           items:
@@ -1068,6 +1094,11 @@ components:
         hasMore:
           type: boolean
           description: 더 많은 메시지 존재 여부
+        nextCursor:
+          oneOf:
+            - $ref: '#/components/schemas/MessageCursor'
+            - type: 'null'
+          description: 다음 이전 메시지 페이지 조회에 사용할 cursor. 마지막 페이지이면 null
       required:
         - messages
         - hasMore

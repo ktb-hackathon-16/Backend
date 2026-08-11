@@ -14,6 +14,7 @@ import java.util.List;
 public class FetchMessagesResponse {
     private List<MessageResponse> messages;
     private boolean hasMore;
+    private MessageCursor nextCursor;
     
     public long firstMessageTimestamp() {
         return messages.getFirst().getTimestamp();

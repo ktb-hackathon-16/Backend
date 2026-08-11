@@ -19,6 +19,7 @@ public class JoinRoomSuccessResponse {
     private List<UserResponse> participants;
     private List<MessageResponse> messages;
     private boolean hasMore;
+    private MessageCursor nextCursor;
     private List<ActiveStreamResponse> activeStreams;
 
     // [ADDED] dto/JoinRoomSuccessResponse.java: 참가자별 읽음 워터마크 스냅샷.

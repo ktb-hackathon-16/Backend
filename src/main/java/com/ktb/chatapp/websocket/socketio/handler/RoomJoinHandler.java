@@ -127,6 +127,7 @@ public class RoomJoinHandler {
                 .participants(participants)
                 .messages(messageLoadResult.getMessages())
                 .hasMore(messageLoadResult.isHasMore())
+                .nextCursor(messageLoadResult.getNextCursor())
                 .activeStreams(Collections.emptyList())
                 .participantReadStates(participantReadStates)
                 .build();
