@@ -28,6 +28,7 @@ import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.Executor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -56,6 +57,10 @@ class ChatMessageHandlerTest {
     @Mock private BannedWordChecker bannedWordChecker;
     @Mock private RateLimitService rateLimitService;
     private MeterRegistry meterRegistry = new SimpleMeterRegistry();
+    // 테스트에서는 실제 스레드풀을 띄우지 않고, 호출한 스레드에서 즉시 동기 실행되는
+    // Executor를 써서 Mockito 검증(verify)이 handleChatMessage 호출 직후에도
+    // 안정적으로 통과하도록 한다.
+    private final Executor chatMessageLookupExecutor = Runnable::run;
 
     private ChatMessageHandler handler;
 
@@ -74,7 +79,8 @@ class ChatMessageHandlerTest {
                         recentMessageCounter,
                         bannedWordChecker,
                         rateLimitService,
-                        meterRegistry);
+                        meterRegistry,
+                        chatMessageLookupExecutor);
     }
 
     @Test
