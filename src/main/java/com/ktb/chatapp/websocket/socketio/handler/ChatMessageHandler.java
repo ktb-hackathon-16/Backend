@@ -170,13 +170,12 @@ public class ChatMessageHandler {
             socketIOServer.getRoomOperations(roomId)
                     .sendEvent(MESSAGE, messageResponse);
 
-
             roomActivityNotifier.notifyMessageStored(roomId);
 
             // AI 멘션 처리
             aiService.handleAIMentions(roomId, socketUser.id(), messageContent);
 
-            // sessionService.updateLastActivity(socketUser.id());
+            sessionService.updateLastActivity(socketUser.id());
 
             // Record success metrics
             recordMessageSuccess(messageType);
