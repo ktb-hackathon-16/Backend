@@ -7,6 +7,7 @@ import com.ktb.chatapp.dto.MessageReactionRequest;
 import com.ktb.chatapp.dto.MessageReactionResponse;
 import com.ktb.chatapp.model.Message;
 import com.ktb.chatapp.repository.MessageRepository;
+import com.ktb.chatapp.service.RecentMessageCache;
 import com.ktb.chatapp.websocket.socketio.SocketUser;
 import java.util.Optional;
 import java.util.Set;
@@ -33,12 +34,13 @@ class MessageReactionHandlerTest {
     @Mock private MessageRepository messageRepository;
     @Mock private SocketIOClient client;
     @Mock private BroadcastOperations roomOperations;
+    @Mock private RecentMessageCache recentMessageCache;
 
     private MessageReactionHandler handler;
 
     @BeforeEach
     void setUp() {
-        handler = new MessageReactionHandler(socketIOServer, messageRepository);
+        handler = new MessageReactionHandler(socketIOServer, messageRepository, recentMessageCache);
     }
 
     @Test

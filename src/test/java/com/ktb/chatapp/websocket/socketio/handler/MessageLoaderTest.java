@@ -7,6 +7,7 @@ import com.ktb.chatapp.repository.FileRepository;
 import com.ktb.chatapp.repository.MessageRepository;
 import com.ktb.chatapp.repository.UserRepository;
 import com.ktb.chatapp.service.MessageReadStatusService;
+import com.ktb.chatapp.service.RecentMessageCache;
 import net.datafaker.Faker;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.BeforeEach;
@@ -42,6 +43,9 @@ class MessageLoaderTest {
     
     @Mock
     private MessageReadStatusService messageReadStatusService;
+
+    @Mock
+    private RecentMessageCache recentMessageCache;
     
     @InjectMocks
     private MessageLoader messageLoader;
@@ -61,7 +65,8 @@ class MessageLoaderTest {
                 messageRepository,
                 userRepository,
                 new MessageResponseMapper(fileRepository),
-                messageReadStatusService
+                messageReadStatusService,
+                recentMessageCache
         );
         
         // 테스트 메시지 50개 생성 (오름차순: 오래된 것 → 최신 것)
