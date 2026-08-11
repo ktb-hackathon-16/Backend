@@ -13,7 +13,7 @@ import com.ktb.chatapp.repository.RoomRepository;
 import com.ktb.chatapp.repository.UserRepository;
 import com.ktb.chatapp.service.MessageReadStatusService;
 import com.ktb.chatapp.websocket.socketio.SocketUser;
-import java.util.List;
+import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,6 +32,9 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+// [CHANGED] test/.../MessageReadHandlerTest.java
+// Last Read Watermark 방식 전환에 따라 MarkAsReadRequest가 messageIds 배열 대신
+// roomId + lastReadMessageId를 받도록 바뀐 것에 맞춰 테스트를 다시 작성했다.
 @ExtendWith(MockitoExtension.class)
 class MessageReadHandlerTest {
 
@@ -57,19 +60,24 @@ class MessageReadHandlerTest {
 
     @Test
     void handleMarkAsRead_rejectsUnauthorizedClient() {
-        MarkAsReadRequest request = request("message-1");
+        MarkAsReadRequest request = request("room-1", "message-1");
         when(client.get("user")).thenReturn(null);
 
         handler.handleMarkAsRead(client, request);
 
         verify(client).sendEvent(eq(ERROR), any());
-        verify(messageReadStatusService, never()).updateReadStatus(any(), any());
+        verify(messageReadStatusService, never()).updateReadStatus(any(), any(), any(), any());
     }
 
     @Test
     void handleMarkAsRead_updatesStatusAndBroadcasts() {
-        MarkAsReadRequest request = request("message-1");
-        Message message = Message.builder().id("message-1").roomId("room-1").build();
+        MarkAsReadRequest request = request("room-1", "message-1");
+        LocalDateTime lastReadAt = LocalDateTime.of(2026, 8, 10, 12, 0, 0);
+        Message message = Message.builder()
+                .id("message-1")
+                .roomId("room-1")
+                .timestamp(lastReadAt)
+                .build();
         Room room = Room.builder().id("room-1").participantIds(Set.of("user-1")).build();
         User user = User.builder().id("user-1").name("tester").email("tester@example.com").build();
 
@@ -82,17 +90,20 @@ class MessageReadHandlerTest {
 
         handler.handleMarkAsRead(client, request);
 
-        verify(messageReadStatusService).updateReadStatus(List.of("message-1"), "user-1");
+        verify(messageReadStatusService).updateReadStatus("room-1", "user-1", "message-1", lastReadAt);
         ArgumentCaptor<Object> responseCaptor = ArgumentCaptor.forClass(Object.class);
         verify(roomOperations).sendEvent(eq(MESSAGES_READ), responseCaptor.capture());
         MessagesReadResponse response = (MessagesReadResponse) responseCaptor.getValue();
         assertEquals("user-1", response.getUserId());
-        assertEquals(List.of("message-1"), response.getMessageIds());
+        assertEquals("room-1", response.getRoomId());
+        assertEquals("message-1", response.getLastReadMessageId());
+        assertEquals(lastReadAt, response.getLastReadAt());
     }
 
-    private MarkAsReadRequest request(String messageId) {
+    private MarkAsReadRequest request(String roomId, String lastReadMessageId) {
         MarkAsReadRequest request = new MarkAsReadRequest();
-        request.setMessageIds(List.of(messageId));
+        request.setRoomId(roomId);
+        request.setLastReadMessageId(lastReadMessageId);
         return request;
     }
 }

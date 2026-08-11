@@ -11,6 +11,7 @@ import com.ktb.chatapp.model.MessageType;
 import com.ktb.chatapp.model.Room;
 import com.ktb.chatapp.model.User;
 import com.ktb.chatapp.repository.MessageRepository;
+import com.ktb.chatapp.repository.ReadReceiptRepository;
 import com.ktb.chatapp.repository.RoomRepository;
 import com.ktb.chatapp.repository.UserRepository;
 import com.ktb.chatapp.websocket.socketio.SocketUser;
@@ -45,6 +46,9 @@ class RoomJoinHandlerTest {
     @Mock private MessageLoader messageLoader;
     @Mock private MessageResponseMapper messageResponseMapper;
     @Mock private RoomLeaveHandler roomLeaveHandler;
+    // [ADDED] test/.../RoomJoinHandlerTest.java: RoomJoinHandler 생성자에 추가된
+    // ReadReceiptRepository 의존성 (참가자별 읽음 워터마크 스냅샷 조회용).
+    @Mock private ReadReceiptRepository readReceiptRepository;
     @Mock private SocketIOClient client;
     @Mock private BroadcastOperations roomOperations;
 
@@ -60,7 +64,8 @@ class RoomJoinHandlerTest {
                 userRooms,
                 messageLoader,
                 messageResponseMapper,
-                roomLeaveHandler);
+                roomLeaveHandler,
+                readReceiptRepository);
     }
 
     @Test
@@ -104,6 +109,8 @@ class RoomJoinHandlerTest {
         when(messageResponseMapper.mapToMessageResponse(any(Message.class), eq(null)))
                 .thenReturn(joinMessageResponse);
         when(socketIOServer.getRoomOperations("room-1")).thenReturn(roomOperations);
+        // [ADDED] 참가자별 읽음 워터마크 스냅샷 조회 스텁 (빈 목록 = 아무도 아직 안 읽음).
+        when(readReceiptRepository.findByRoomId("room-1")).thenReturn(List.of());
 
         handler.handleJoinRoom(client, "room-1");
 

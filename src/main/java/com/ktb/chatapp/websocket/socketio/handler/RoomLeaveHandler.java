@@ -94,7 +94,7 @@ public class RoomLeaveHandler {
             systemMessage.setTimestamp(LocalDateTime.now());
             systemMessage.setMentions(new ArrayList<>());
             systemMessage.setReactions(new HashMap<>());
-            systemMessage.setReaders(new ArrayList<>());
+            // [CHANGED] handler/RoomLeaveHandler.java: setReaders(...) 제거 (필드 삭제됨).
             systemMessage.setMetadata(new HashMap<>());
 
             Message savedMessage = messageRepository.save(systemMessage);

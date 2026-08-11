@@ -26,7 +26,7 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doNothing;
 
@@ -79,8 +79,10 @@ class MessageLoaderIntegrationTest {
                 .build();
         userRepository.save(testUser);
 
-        // MessageReadStatusService mock 설정
-        doNothing().when(messageReadStatusService).updateReadStatus(anyList(), anyString());
+        // [CHANGED] test/.../MessageLoaderIntegrationTest.java: updateReadStatus 시그니처가
+        // (roomId, userId, lastReadMessageId, lastReadAt)로 바뀐 것에 맞춰 스텁 수정.
+        doNothing().when(messageReadStatusService)
+                .updateReadStatus(anyString(), anyString(), anyString(), any(LocalDateTime.class));
     }
 
     @AfterEach

@@ -290,10 +290,11 @@ operations:
       $ref: '#/channels/markMessagesAsRead'
     summary: 메시지 읽음 처리
     description: |
-      클라이언트가 메시지를 읽음으로 표시합니다.
+      클라이언트가 "여기까지 읽었다"는 워터마크(roomId + lastReadMessageId)를 보냅니다.
+      (Last Read Watermark 방식 — 메시지별이 아니라 방+유저당 워터마크 1개만 갱신)
 
       **예외 응답 (error 이벤트):**
-      - message만 반환: "Unauthorized", "Invalid room", "User not found", "Room access denied", "읽음 상태 업데이트 중 오류가 발생했습니다."
+      - message만 반환: "Unauthorized", "Invalid message", "User not found", "Room access denied", "읽음 상태 업데이트 중 오류가 발생했습니다."
 
   sendMessageReaction:
     action: send
@@ -577,10 +578,13 @@ components:
           - _id
           - recentMessageCount
 
+    # [CHANGED] Last Read Watermark 방식으로 전환: messageIds 배열 대신
+    # "방+유저"당 워터마크 좌표 1개(roomId, lastReadMessageId, lastReadAt)만 내려준다.
+    # 참고: apps/backend .../dto/MessagesReadResponse.java
     MessagesReadResponse:
       name: MessagesRead
-      title: 메시지 읽음 상태 업데이트
-      summary: 메시지 읽음 상태 업데이트 페이로드
+      title: 읽음 워터마크 업데이트
+      summary: 유저별 "여기까지 읽었다" 워터마크 업데이트 페이로드
       contentType: application/json
       payload:
         type: object
@@ -588,14 +592,21 @@ components:
           userId:
             type: string
             description: 읽은 사용자 ID
-          messageIds:
-            type: array
-            items:
-              type: string
-            description: 읽은 메시지 ID 목록
+          roomId:
+            type: string
+            description: 방 ID
+          lastReadMessageId:
+            type: string
+            description: 그 방에서 유저가 가장 마지막으로 읽은 메시지 ID
+          lastReadAt:
+            type: string
+            format: date-time
+            description: lastReadMessageId의 timestamp (워터마크 비교 기준)
         required:
           - userId
-          - messageIds
+          - roomId
+          - lastReadMessageId
+          - lastReadAt
 
     MessageReactionUpdateResponse:
       name: MessageReactionUpdate
@@ -848,16 +859,21 @@ components:
       required:
         - roomId
 
+    # [CHANGED] Last Read Watermark 방식으로 전환: messageIds 배열 대신
+    # roomId + lastReadMessageId(마지막으로 확인한 메시지 1건)만 받는다.
+    # 참고: apps/backend .../dto/MarkAsReadRequest.java
     MarkAsReadRequest:
       type: object
       properties:
-        messageIds:
-          type: array
-          items:
-            type: string
-          description: 읽은 메시지 ID 목록
+        roomId:
+          type: string
+          description: 읽음 상태를 갱신할 방 ID
+        lastReadMessageId:
+          type: string
+          description: 그 방에서 유저가 확인한 가장 마지막(최신) 메시지 ID
       required:
-        - messageIds
+        - roomId
+        - lastReadMessageId
 
     MessageReactionRequest:
       type: object
@@ -921,17 +937,10 @@ components:
             items:
               type: string
           description: 리액션 맵 (이모지 -> 사용자 ID 배열)
-        readers:
-          type: array
-          items:
-            type: object
-            properties:
-              userId:
-                type: string
-              readAt:
-                type: integer
-                format: int64
-          description: 읽음 정보
+        # [REMOVED] readers 필드 삭제. Last Read Watermark 방식으로 전환하면서
+        # 메시지마다 읽은 사람 배열을 실어보내지 않는다. 안읽음 표시는 클라이언트가
+        # joinRoomSuccess.participantReadStates + messagesRead 브로드캐스트로 받는
+        # room 단위 워터마크와 이 메시지의 timestamp를 비교해 계산한다.
         metadata:
           type: object
           additionalProperties: true
@@ -1026,6 +1035,22 @@ components:
           items:
             type: object
           description: 활성 스트림 목록
+        # [ADDED] Last Read Watermark 방식: 방 입장 시 참가자별 읽음 워터마크 스냅샷을
+        # 함께 내려준다. 프론트는 이 값으로 초기 안읽음 배지를 계산하고, 이후로는
+        # messagesRead 브로드캐스트로만 갱신한다. 참고: dto/ParticipantReadState.java
+        participantReadStates:
+          type: array
+          items:
+            type: object
+            properties:
+              userId:
+                type: string
+              lastReadMessageId:
+                type: string
+              lastReadAt:
+                type: string
+                format: date-time
+          description: 참가자별 현재 읽음 워터마크 스냅샷
       required:
         - roomId
         - participants

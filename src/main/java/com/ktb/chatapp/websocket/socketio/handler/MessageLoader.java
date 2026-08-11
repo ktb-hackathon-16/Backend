@@ -63,10 +63,18 @@ public class MessageLoader {
 
         // DESC로 조회했으므로 ASC로 재정렬 (채팅 UI 표시 순서)
         List<Message> sortedMessages = messages.reversed();
-        
-        var messageIds = sortedMessages.stream().map(Message::getId).toList();
-        messageReadStatusService.updateReadStatus(messageIds, userId);
-        
+
+        // [CHANGED] handler/MessageLoader.java: 예전엔 조회된 메시지 ID를 전부 모아
+        // updateReadStatus(messageIds, userId)로 넘겨 메시지 개수만큼 DB에 쓰기를 반복했다.
+        // Last Read Watermark 방식에서는 "이 배치에서 가장 최신 메시지"까지만 워터마크를
+        // 전진시키면 그 이전 메시지는 전부 읽은 것으로 간주되므로, 마지막 메시지 1건의
+        // id/timestamp만 넘긴다.
+        if (!sortedMessages.isEmpty()) {
+            Message latestInBatch = sortedMessages.getLast();
+            messageReadStatusService.updateReadStatus(
+                    roomId, userId, latestInBatch.getId(), latestInBatch.getTimestamp());
+        }
+
         // 메시지 응답 생성
         List<MessageResponse> messageResponses = sortedMessages.stream()
                 .map(message -> {

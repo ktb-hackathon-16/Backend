@@ -59,25 +59,15 @@ public class Message {
     @Builder.Default
     private Map<String, Set<String>> reactions = new HashMap<>();
 
-    // 메시지 읽음 상태 관리
-    @Builder.Default
-    private List<MessageReader> readers = new ArrayList<>();
+    // [REMOVED] model/Message.java: readers 필드 + MessageReader 내부 클래스 삭제.
+    // Last Read Watermark 방식으로 전환하면서 "메시지마다 읽은 사람 배열"을 더는 저장하지
+    // 않는다. 읽음 상태는 ReadReceipt 컬렉션(방+유저당 문서 1개, 워터마크 1개)이 대신한다.
+    // 참고: service/MessageReadStatusService.java, model/ReadReceipt.java
 
     // 자유 형식 metadata 저장 필드
     @Builder.Default
     private Map<String, Object> metadata = new HashMap<>();
 
-    // 메시지 읽음 상태를 나타내는 내부 클래스
-    @Data
-    @Builder
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class MessageReader {
-        private String userId;
-        private LocalDateTime readAt;
-    }
-    
-    
     public long toTimestampMillis() {
         return timestamp.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
     }
