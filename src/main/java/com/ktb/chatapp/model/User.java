@@ -55,10 +55,10 @@ public class User {
     @Component
     public static class UserEventListener extends AbstractMongoEventListener<User> {
         
-        private final org.springframework.context.ApplicationContext applicationContext;
+        private final EncryptionUtil encryptionUtil;
         
-        public UserEventListener(org.springframework.context.ApplicationContext applicationContext) {
-            this.applicationContext = applicationContext;
+        public UserEventListener(EncryptionUtil encryptionUtil) {
+            this.encryptionUtil = encryptionUtil;
         }
         
         @Override
@@ -69,8 +69,6 @@ public class User {
                 
                 // 이메일 암호화
                 try {
-                    EncryptionUtil encryptionUtil =
-                        applicationContext.getBean(EncryptionUtil.class);
                     String encrypted = encryptionUtil.encrypt(user.getEmail());
                     if (encrypted != null) {
                         user.setEncryptedEmail(encrypted);

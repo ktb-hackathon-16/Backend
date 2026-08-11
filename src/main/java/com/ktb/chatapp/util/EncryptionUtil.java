@@ -29,14 +29,20 @@ public class EncryptionUtil {
     }
     
     public String encrypt(String plainText) {
+        if (plainText == null || plainText.isBlank()) {
+            return plainText;
+        }
         return textEncryptor.encrypt(plainText);
     }
 
     public String decrypt(String encryptedText) {
+        if (encryptedText == null || encryptedText.isBlank()) {
+            return encryptedText;
+        }
         try {
             return textEncryptor.decrypt(encryptedText);
         } catch (IllegalArgumentException e) {
-            log.error("Decryption failed for text: {}", encryptedText);
+            log.warn("Decryption failed: invalid encrypted text");
             return null;
         }
     }
