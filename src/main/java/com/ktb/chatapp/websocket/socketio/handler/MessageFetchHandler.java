@@ -51,8 +51,15 @@ public class MessageFetchHandler {
                 return;
             }
 
-            log.debug("Starting message load for user {} in room {}, limit: {}, before: {}",
-                    userId, data.roomId(), data.limit(), data.before());
+            log.debug(
+                    "Starting message load for user {} in room {}, "
+                            + "limit: {}, cursor: {}, legacyBefore: {}",
+                    userId,
+                    data.roomId(),
+                    data.limit(),
+                    data.cursor(),
+                    data.before()
+            );
 
             log.debug("Loading messages for room {}", data.roomId());
             FetchMessagesResponse result = messageLoader.loadMessages(data, userId);

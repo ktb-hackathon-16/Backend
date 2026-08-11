@@ -110,14 +110,15 @@ public class RoomJoinHandler {
                     .map(Optional::get)
                     .map(UserResponse::from)
                     .toList();
-            
+
             JoinRoomSuccessResponse response = JoinRoomSuccessResponse.builder()
-                .roomId(roomId)
-                .participants(participants)
-                .messages(messageLoadResult.getMessages())
-                .hasMore(messageLoadResult.isHasMore())
-                .activeStreams(Collections.emptyList())
-                .build();
+                    .roomId(roomId)
+                    .participants(participants)
+                    .messages(messageLoadResult.getMessages())
+                    .hasMore(messageLoadResult.isHasMore())
+                    .nextCursor(messageLoadResult.getNextCursor())
+                    .activeStreams(Collections.emptyList())
+                    .build();
 
             client.sendEvent(JOIN_ROOM_SUCCESS, response);
 
