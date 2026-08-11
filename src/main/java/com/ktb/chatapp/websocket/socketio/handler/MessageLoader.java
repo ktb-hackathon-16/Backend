@@ -1,7 +1,5 @@
 package com.ktb.chatapp.websocket.socketio.handler;
 
-import static java.util.Collections.emptyList;
-
 import com.ktb.chatapp.dto.FetchMessagesRequest;
 import com.ktb.chatapp.dto.FetchMessagesResponse;
 import com.ktb.chatapp.dto.MessageCursor;
@@ -45,57 +43,49 @@ public class MessageLoader {
             FetchMessagesRequest data,
             String userId
     ) {
-        try {
-            int limit = Math.min(
-                    data.limit(BATCH_SIZE),
-                    MAX_BATCH_SIZE
+        if (data == null) {
+            throw new IllegalArgumentException(
+                    "메시지 조회 요청은 필수입니다."
             );
+        }
 
-            if (data.cursor() != null && !data.cursor().isValid()) {
-                throw new IllegalArgumentException(
-                        "timestamp와 messageId가 모두 포함된 cursor가 필요합니다."
-                );
-            }
+        int limit = Math.min(
+                data.limit(BATCH_SIZE),
+                MAX_BATCH_SIZE
+        );
 
-            /*
-             * 새로운 요청:
-             * - 최초 조회(cursor와 before가 모두 없음)
-             * - 복합 cursor 조회
-             */
-            if (data.hasCursor()
-                    || data.before() == null
-                    || data.before() <= 0) {
-                return loadKeysetMessages(
-                        data.roomId(),
-                        limit,
-                        data.cursor(),
-                        userId
-                );
-            }
+        if (data.cursor() != null && !data.cursor().isValid()) {
+            throw new IllegalArgumentException(
+                    "timestamp와 messageId가 모두 포함된 cursor가 필요합니다."
+            );
+        }
 
-            /*
-             * 기존 클라이언트 하위 호환:
-             * before만 전달된 경우 기존 Page 조회를 임시 유지한다.
-             */
-            return loadLegacyMessages(
+        /*
+         * 새로운 요청:
+         * - 최초 조회(cursor와 before가 모두 없음)
+         * - 복합 cursor 조회
+         */
+        if (data.hasCursor()
+                || data.before() == null
+                || data.before() <= 0) {
+            return loadKeysetMessages(
                     data.roomId(),
                     limit,
-                    data.before(LocalDateTime.now()),
+                    data.cursor(),
                     userId
             );
-        } catch (Exception e) {
-            log.error(
-                    "Error loading messages for room {}",
-                    data.roomId(),
-                    e
-            );
-
-            return FetchMessagesResponse.builder()
-                    .messages(emptyList())
-                    .hasMore(false)
-                    .nextCursor(null)
-                    .build();
         }
+
+        /*
+         * 기존 클라이언트 하위 호환:
+         * before만 전달된 경우 기존 Page 조회를 임시 유지한다.
+         */
+        return loadLegacyMessages(
+                data.roomId(),
+                limit,
+                data.before(LocalDateTime.now()),
+                userId
+        );
     }
 
     /**
