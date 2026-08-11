@@ -4,8 +4,8 @@ import com.ktb.chatapp.model.Session;
 import com.ktb.chatapp.service.session.SessionStore;
 import java.time.Instant;
 import java.util.UUID;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.convert.DurationStyle;
 import org.springframework.stereotype.Service;
 
@@ -13,10 +13,13 @@ import static com.ktb.chatapp.model.Session.SESSION_TTL;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class SessionService {
 
     private final SessionStore sessionStore;
+
+    public SessionService(@Qualifier("redisSessionStore") SessionStore sessionStore) {
+        this.sessionStore = sessionStore;
+    }
     public static final long SESSION_TTL_SEC = DurationStyle.detectAndParse(SESSION_TTL).getSeconds();
     private static final long SESSION_TIMEOUT = SESSION_TTL_SEC * 1000;
 
