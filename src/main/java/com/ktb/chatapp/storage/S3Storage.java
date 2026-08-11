@@ -5,8 +5,10 @@ import java.io.InputStream;
 import java.net.URI;
 import java.time.Duration;
 import java.util.Optional;
+import lombok.extern.slf4j.Slf4j;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ContentDisposition;
 import org.springframework.stereotype.Component;
@@ -16,9 +18,11 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 @ConditionalOnProperty(name = "file.storage.type", havingValue = "s3")
@@ -45,7 +49,18 @@ public class S3Storage implements StoragePort {
 
     @Override
     public Optional<Resource> open(String key) {
-        return Optional.empty();
+        try {
+            return Optional.of(new InputStreamResource(s3Client.getObject(GetObjectRequest.builder()
+                    .bucket(properties.bucket())
+                    .key(key)
+                    .build())));
+        } catch (S3Exception e) {
+            if (e.statusCode() == 404) {
+                return Optional.empty();
+            }
+            log.warn("S3 object open failed: key={}, status={}", key, e.statusCode());
+            throw e;
+        }
     }
 
     @Override

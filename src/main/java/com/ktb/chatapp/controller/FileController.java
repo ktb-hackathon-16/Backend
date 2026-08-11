@@ -1,6 +1,8 @@
 package com.ktb.chatapp.controller;
 
 import com.ktb.chatapp.dto.StandardResponse;
+import com.ktb.chatapp.dto.PresignedUploadCompleteRequest;
+import com.ktb.chatapp.dto.PresignedUploadRequest;
 import com.ktb.chatapp.model.User;
 import com.ktb.chatapp.repository.UserRepository;
 import com.ktb.chatapp.service.FileAccess;
@@ -8,6 +10,7 @@ import com.ktb.chatapp.service.FileAccessService;
 import com.ktb.chatapp.service.FileService;
 import com.ktb.chatapp.service.FileUploadResult;
 import com.ktb.chatapp.service.PreviewNotSupportedException;
+import com.ktb.chatapp.service.S3DirectUploadService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -16,6 +19,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.Principal;
@@ -23,6 +27,7 @@ import java.util.HashMap;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -41,6 +46,7 @@ public class FileController {
     private final FileService fileService;
     private final FileAccessService fileAccessService;
     private final UserRepository userRepository;
+    private final ObjectProvider<S3DirectUploadService> directUploadServiceProvider;
 
     /**
      * 파일 업로드
@@ -62,8 +68,7 @@ public class FileController {
             @Parameter(description = "업로드할 파일") @RequestParam("file") MultipartFile file,
             Principal principal) {
         try {
-            User user = userRepository.findByEmail(principal.getName())
-                    .orElseThrow(() -> new UsernameNotFoundException("User not found: " + principal.getName()));
+            User user = currentUser(principal);
 
             FileUploadResult result = fileService.uploadFile(file, user.getId());
 
@@ -82,6 +87,7 @@ public class FileController {
                 fileData.put("previewSize", result.getFile().getPreviewSize());
                 fileData.put("thumbnailUrl", com.ktb.chatapp.service.FileUrl.publicMediaOf(result.getFile().getThumbnailPath()));
                 fileData.put("thumbnailSize", result.getFile().getThumbnailSize());
+                fileData.put("status", result.getFile().getStatus() != null ? result.getFile().getStatus().name() : null);
                 fileData.put("uploadDate", result.getFile().getUploadDate());
                 
                 response.put("file", fileData);
@@ -101,6 +107,50 @@ public class FileController {
             errorResponse.put("message", "파일 업로드 중 오류가 발생했습니다.");
             errorResponse.put("error", e.getMessage());
             return ResponseEntity.status(500).body(errorResponse);
+        }
+    }
+
+    @Operation(summary = "S3 직접 업로드 URL 발급", description = "파일 원본을 BE가 중계하지 않고 S3에 직접 업로드하기 위한 presigned PUT URL을 발급합니다.")
+    @PostMapping("/presign")
+    public ResponseEntity<?> createPresignedUpload(
+            @Valid @RequestBody PresignedUploadRequest request,
+            Principal principal) {
+        try {
+            S3DirectUploadService directUploadService = requireDirectUploadService();
+            User user = currentUser(principal);
+            return ResponseEntity.ok(directUploadService.createUpload(request, user.getId()));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "message", e.getMessage()));
+        } catch (Exception e) {
+            log.error("presigned upload URL 발급 중 에러 발생", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
+                    "success", false,
+                    "message", "업로드 URL 발급 중 오류가 발생했습니다."));
+        }
+    }
+
+    @Operation(summary = "S3 직접 업로드 완료 처리", description = "S3 직접 업로드 완료 후 원본 객체를 검증하고 preview/thumbnail 생성을 비동기로 시작합니다.")
+    @PostMapping("/complete")
+    public ResponseEntity<?> completePresignedUpload(
+            @Valid @RequestBody PresignedUploadCompleteRequest request,
+            Principal principal) {
+        try {
+            S3DirectUploadService directUploadService = requireDirectUploadService();
+            User user = currentUser(principal);
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "file", directUploadService.completeUpload(request.fileId(), user.getId())));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "message", e.getMessage()));
+        } catch (Exception e) {
+            log.error("presigned upload 완료 처리 중 에러 발생", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
+                    "success", false,
+                    "message", "업로드 완료 처리 중 오류가 발생했습니다."));
         }
     }
 
@@ -197,6 +247,19 @@ public class FileController {
         errorResponse.put("message", responseMessage);
 
         return ResponseEntity.status(statusCode).body(errorResponse);
+    }
+
+    private User currentUser(Principal principal) {
+        return userRepository.findByEmail(principal.getName())
+                .orElseThrow(() -> new UsernameNotFoundException("User not found: " + principal.getName()));
+    }
+
+    private S3DirectUploadService requireDirectUploadService() {
+        S3DirectUploadService directUploadService = directUploadServiceProvider.getIfAvailable();
+        if (directUploadService == null) {
+            throw new IllegalArgumentException("S3 직접 업로드가 활성화되어 있지 않습니다.");
+        }
+        return directUploadService;
     }
 
     @GetMapping("/view/{filename:.+}")
