@@ -55,8 +55,8 @@ public class ImageVariantService {
             String baseName = stripExtension(safeFileName);
             byte[] preview = encodeJpeg(resizeToMaxWidth(source, 1280));
             byte[] thumbnail = encodeJpeg(resizeToMaxWidth(source, 320));
-            String previewKey = "chat/previews/" + baseName + "-preview.jpg";
-            String thumbnailKey = "chat/thumbnails/" + baseName + "-thumb.jpg";
+            String previewKey = StorageKey.mediaChatPreview(baseName + "-preview.jpg");
+            String thumbnailKey = StorageKey.mediaChatThumbnail(baseName + "-thumb.jpg");
 
             storagePort.put(new ByteArrayInputStream(preview), previewKey, IMAGE_JPEG, preview.length);
             storagePort.put(new ByteArrayInputStream(thumbnail), thumbnailKey, IMAGE_JPEG, thumbnail.length);

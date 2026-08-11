@@ -26,4 +26,12 @@ class FileUrlTest {
         assertThat(FileUrl.of(null)).isNull();
         assertThat(FileUrl.of("")).isEmpty();
     }
+
+    @Test
+    @DisplayName("publicMediaOf()는 CDN 공개 key만 상대경로로 변환한다")
+    void publicMediaOf_returnsOnlyMediaPaths() {
+        assertThat(FileUrl.publicMediaOf("media/chat/previews/photo-preview.jpg"))
+                .isEqualTo("/media/chat/previews/photo-preview.jpg");
+        assertThat(FileUrl.publicMediaOf("chat/photo.png")).isNull();
+    }
 }
