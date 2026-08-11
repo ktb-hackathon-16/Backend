@@ -1,9 +1,11 @@
 package com.ktb.chatapp.service;
 
 import com.ktb.chatapp.model.ReadReceipt;
+import com.mongodb.client.result.UpdateResult;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
@@ -52,27 +54,55 @@ public class MessageReadStatusService {
         }
 
         try {
-            // 워터마크가 "전진"할 때만 갱신되도록 조건을 건다.
-            // 네트워크 지연 등으로 read-ack가 순서 뒤바뀌어 늦게 도착해도,
-            // 이미 반영된 더 최신 워터마크를 과거 값으로 덮어쓰지 않기 위함이다.
-            Criteria notBehind = new Criteria().orOperator(
-                    Criteria.where("lastReadAt").lt(lastReadAt),
-                    Criteria.where("lastReadAt").exists(false));
-            Query query = Query.query(new Criteria().andOperator(
-                    Criteria.where("room").is(roomId),
-                    Criteria.where("user").is(userId),
-                    notBehind));
-            Update update = new Update()
-                    .set("lastReadMessageId", lastReadMessageId)
-                    .set("lastReadAt", lastReadAt)
-                    .setOnInsert("room", roomId)
-                    .setOnInsert("user", userId);
-            mongoTemplate.upsert(query, update, ReadReceipt.class);
+            UpdateResult advanced = advanceExistingWatermark(roomId, userId, lastReadMessageId, lastReadAt);
+            if (advanced.getMatchedCount() == 0) {
+                try {
+                    insertInitialWatermarkIfAbsent(roomId, userId, lastReadMessageId, lastReadAt);
+                } catch (DuplicateKeyException duplicateKeyException) {
+                    // A concurrent read-ack created the room+user receipt first. Retry the forward-only
+                    // update so this event can still advance the watermark if it is newer.
+                    advanceExistingWatermark(roomId, userId, lastReadMessageId, lastReadAt);
+                }
+            }
 
             log.debug("Read watermark advanced for room {} by user {} to message {}",
                     roomId, userId, lastReadMessageId);
         } catch (Exception e) {
             log.error("Read status update error for room {} user {}", roomId, userId, e);
         }
+    }
+
+    private UpdateResult advanceExistingWatermark(
+            String roomId,
+            String userId,
+            String lastReadMessageId,
+            LocalDateTime lastReadAt) {
+        Criteria watermarkCanAdvance = new Criteria().orOperator(
+                Criteria.where("lastReadAt").lt(lastReadAt),
+                Criteria.where("lastReadAt").exists(false));
+        Query query = Query.query(new Criteria().andOperator(
+                Criteria.where("room").is(roomId),
+                Criteria.where("user").is(userId),
+                watermarkCanAdvance));
+        Update update = new Update()
+                .set("lastReadMessageId", lastReadMessageId)
+                .set("lastReadAt", lastReadAt);
+
+        return mongoTemplate.updateFirst(query, update, ReadReceipt.class);
+    }
+
+    private UpdateResult insertInitialWatermarkIfAbsent(
+            String roomId,
+            String userId,
+            String lastReadMessageId,
+            LocalDateTime lastReadAt) {
+        Query query = Query.query(Criteria.where("room").is(roomId).and("user").is(userId));
+        Update update = new Update()
+                .setOnInsert("room", roomId)
+                .setOnInsert("user", userId)
+                .setOnInsert("lastReadMessageId", lastReadMessageId)
+                .setOnInsert("lastReadAt", lastReadAt);
+
+        return mongoTemplate.upsert(query, update, ReadReceipt.class);
     }
 }
