@@ -25,6 +25,7 @@ public class FileResponse {
     private long previewSize;
     private String thumbnailUrl;
     private long thumbnailSize;
+    private String status;
     private String user;
     private LocalDateTime uploadDate;
 
@@ -40,6 +41,7 @@ public class FileResponse {
                 .previewSize(file.getPreviewSize())
                 .thumbnailUrl(FileUrl.publicMediaOf(file.getThumbnailPath()))
                 .thumbnailSize(file.getThumbnailSize())
+                .status(file.getStatus() != null ? file.getStatus().name() : null)
                 .user(file.getUser())
                 .uploadDate(file.getUploadDate())
                 .build();

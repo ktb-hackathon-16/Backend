@@ -43,6 +43,9 @@ public class File {
 
     private long thumbnailSize;
 
+    @Builder.Default
+    private FileStatus status = FileStatus.READY;
+
     @Field("user")
     private String user;
 

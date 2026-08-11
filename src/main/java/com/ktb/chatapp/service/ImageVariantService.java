@@ -9,6 +9,7 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -50,8 +51,21 @@ public class ImageVariantService {
             return Optional.empty();
         }
 
+        try (InputStream inputStream = file.getInputStream()) {
+            return storeChatVariants(inputStream, file.getContentType(), safeFileName);
+        } catch (IOException e) {
+            log.warn("채팅 이미지 variant 생성 실패, 원본만 저장: {}", e.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    public Optional<ChatImageVariants> storeChatVariants(InputStream inputStream, String contentType, String safeFileName) {
+        if (!isImage(contentType)) {
+            return Optional.empty();
+        }
+
         try {
-            BufferedImage source = readImage(file);
+            BufferedImage source = readImage(inputStream);
             String baseName = stripExtension(safeFileName);
             byte[] preview = encodeJpeg(resizeToMaxWidth(source, 1280));
             byte[] thumbnail = encodeJpeg(resizeToMaxWidth(source, 320));
@@ -95,7 +109,11 @@ public class ImageVariantService {
     }
 
     private BufferedImage readImage(MultipartFile file) throws IOException {
-        BufferedImage image = ImageIO.read(file.getInputStream());
+        return readImage(file.getInputStream());
+    }
+
+    private BufferedImage readImage(InputStream inputStream) throws IOException {
+        BufferedImage image = ImageIO.read(inputStream);
         if (image == null) {
             throw new IllegalArgumentException("이미지 데이터를 읽을 수 없습니다.");
         }
@@ -103,7 +121,10 @@ public class ImageVariantService {
     }
 
     private boolean isImage(MultipartFile file) {
-        String contentType = file.getContentType();
+        return isImage(file.getContentType());
+    }
+
+    private boolean isImage(String contentType) {
         return contentType != null && contentType.startsWith("image/");
     }
 

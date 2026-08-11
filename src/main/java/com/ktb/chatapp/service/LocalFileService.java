@@ -1,6 +1,7 @@
 package com.ktb.chatapp.service;
 
 import com.ktb.chatapp.model.File;
+import com.ktb.chatapp.model.FileStatus;
 import com.ktb.chatapp.repository.FileRepository;
 import com.ktb.chatapp.storage.StorageKey;
 import com.ktb.chatapp.storage.StoragePort;
@@ -64,6 +65,7 @@ public class LocalFileService implements FileService {
                     .previewSize(variants.map(ImageVariantService.ChatImageVariants::previewSize).orElse(0L))
                     .thumbnailPath(variants.map(ImageVariantService.ChatImageVariants::thumbnailPath).orElse(null))
                     .thumbnailSize(variants.map(ImageVariantService.ChatImageVariants::thumbnailSize).orElse(0L))
+                    .status(FileStatus.READY)
                     .user(uploaderId)
                     .uploadDate(LocalDateTime.now())
                     .build();
