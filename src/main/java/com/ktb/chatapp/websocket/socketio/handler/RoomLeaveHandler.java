@@ -12,6 +12,7 @@ import com.ktb.chatapp.model.User;
 import com.ktb.chatapp.repository.MessageRepository;
 import com.ktb.chatapp.repository.RoomRepository;
 import com.ktb.chatapp.repository.UserRepository;
+import com.ktb.chatapp.service.RecentMessageCounter;
 import com.ktb.chatapp.websocket.socketio.SocketUser;
 import com.ktb.chatapp.websocket.socketio.UserRooms;
 import java.time.LocalDateTime;
@@ -42,6 +43,7 @@ public class RoomLeaveHandler {
     private final UserRepository userRepository;
     private final UserRooms userRooms;
     private final MessageResponseMapper messageResponseMapper;
+    private final RecentMessageCounter recentMessageCounter;
     
     @OnEvent(LEAVE_ROOM)
     public void handleLeaveRoom(SocketIOClient client, String roomId) {
@@ -98,6 +100,7 @@ public class RoomLeaveHandler {
             systemMessage.setMetadata(new HashMap<>());
 
             Message savedMessage = messageRepository.save(systemMessage);
+            recentMessageCounter.recordMessage(savedMessage);
             MessageResponse response = messageResponseMapper.mapToMessageResponse(savedMessage, null);
 
             socketIOServer.getRoomOperations(roomId)
@@ -114,12 +117,13 @@ public class RoomLeaveHandler {
             return;
         }
         
-        var participantList = roomOpt.get()
-                .getParticipantIds()
-                .stream()
-                .map(userRepository::findById)
-                .filter(Optional::isPresent)
-                .map(Optional::get)
+        var participantIds = roomOpt.get().getParticipantIds();
+        if (participantIds == null || participantIds.isEmpty()) {
+            return;
+        }
+
+        var participantList = userRepository.findSummariesByIdIn(participantIds).stream()
+                .filter(user -> user.getId() != null)
                 .map(UserResponse::from)
                 .toList();
         

@@ -16,6 +16,7 @@ import com.ktb.chatapp.repository.UserRepository;
 import com.ktb.chatapp.service.RateLimitCheckResult;
 import com.ktb.chatapp.service.RateLimitService;
 import com.ktb.chatapp.service.RoomActivityNotifier;
+import com.ktb.chatapp.service.RecentMessageCounter;
 import com.ktb.chatapp.service.SessionService;
 import com.ktb.chatapp.service.SessionValidationResult;
 import com.ktb.chatapp.util.BannedWordChecker;
@@ -51,6 +52,7 @@ class ChatMessageHandlerTest {
     @Mock private AiService aiService;
     @Mock private SessionService sessionService;
     @Mock private RoomActivityNotifier roomActivityNotifier;
+    @Mock private RecentMessageCounter recentMessageCounter;
     @Mock private BannedWordChecker bannedWordChecker;
     @Mock private RateLimitService rateLimitService;
     private MeterRegistry meterRegistry = new SimpleMeterRegistry();
@@ -69,6 +71,7 @@ class ChatMessageHandlerTest {
                         aiService,
                         sessionService,
                         roomActivityNotifier,
+                        recentMessageCounter,
                         bannedWordChecker,
                         rateLimitService,
                         meterRegistry);

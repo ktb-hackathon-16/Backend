@@ -40,12 +40,13 @@ public class RoomService {
             // 전체 방을 조회해 최신순으로 정렬한다
             List<Room> rooms = roomRepository.findAll();
             Map<String, User> usersById = loadUsers(rooms);
-            Map<String, Integer> recentMessageCounts = recentMessageCounter.countRecentMessagesByRoomIds(
-                    rooms.stream()
-                            .map(Room::getId)
-                            .filter(Objects::nonNull)
-                            .distinct()
-                            .toList());
+            List<String> roomIds = rooms.stream()
+                    .map(Room::getId)
+                    .filter(Objects::nonNull)
+                    .distinct()
+                    .toList();
+            Map<String, Integer> recentMessageCounts = recentMessageCounter.countRecentMessagesByRoomIds(roomIds);
+            recentMessageCounter.warmupRecentMessagesByRoomIds(roomIds);
 
             List<RoomResponse> roomResponses = rooms.stream()
                 .map(room -> mapToRoomResponse(room, name, usersById, recentMessageCounts))

@@ -30,10 +30,22 @@ public interface MessageRepository
     })
     List<RecentMessageCount> countRecentMessagesByRoomIds(List<String> roomIds, LocalDateTime since);
 
+    @Query(value = "{ 'room': { '$in': ?0 }, 'timestamp': { '$gte': ?1 } }",
+            fields = "{ '_id': 1, 'room': 1, 'timestamp': 1 }")
+    List<RecentMessageSeed> findRecentMessageSeedsByRoomIds(List<String> roomIds, LocalDateTime since);
+
     interface RecentMessageCount {
         String getRoom();
 
         long getCount();
+    }
+
+    interface RecentMessageSeed {
+        String getId();
+
+        String getRoom();
+
+        LocalDateTime getTimestamp();
     }
 
     /**
