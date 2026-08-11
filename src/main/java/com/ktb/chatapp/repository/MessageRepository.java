@@ -43,7 +43,7 @@ public interface MessageRepository
     interface RecentMessageSeed {
         String getId();
 
-        String getRoom();
+        String getRoomId();
 
         LocalDateTime getTimestamp();
     }

@@ -7,6 +7,7 @@ import com.ktb.chatapp.dto.MessageReactionRequest;
 import com.ktb.chatapp.dto.MessageReactionResponse;
 import com.ktb.chatapp.model.Message;
 import com.ktb.chatapp.repository.MessageRepository;
+import com.ktb.chatapp.service.RecentMessageCache;
 import com.ktb.chatapp.websocket.socketio.SocketUser;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +29,7 @@ public class MessageReactionHandler {
     
     private final SocketIOServer socketIOServer;
     private final MessageRepository messageRepository;
+    private final RecentMessageCache recentMessageCache;
     
     @OnEvent(MESSAGE_REACTION)
     public void handleMessageReaction(SocketIOClient client, MessageReactionRequest data) {
@@ -57,6 +59,7 @@ public class MessageReactionHandler {
                 data.getType(), data.getReaction(), message.getId(), userId);
 
             messageRepository.save(message);
+            recentMessageCache.update(message);
 
             MessageReactionResponse response = new MessageReactionResponse(
                 message.getId(),
