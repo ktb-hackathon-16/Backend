@@ -2,13 +2,17 @@ package com.ktb.chatapp.websocket.socketio.handler;
 
 import com.ktb.chatapp.dto.FetchMessagesRequest;
 import com.ktb.chatapp.dto.FetchMessagesResponse;
+import com.ktb.chatapp.dto.MessageCursor;
 import com.ktb.chatapp.dto.MessageResponse;
 import com.ktb.chatapp.model.Message;
 import com.ktb.chatapp.model.User;
 import com.ktb.chatapp.repository.MessageRepository;
 import com.ktb.chatapp.repository.UserRepository;
 import com.ktb.chatapp.service.MessageReadStatusService;
+import jakarta.annotation.Nullable;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -22,75 +26,180 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Component;
 
-import static java.util.Collections.emptyList;
-
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class MessageLoader {
+
+    private static final int BATCH_SIZE = 30;
+    private static final int MAX_BATCH_SIZE = 100;
 
     private final MessageRepository messageRepository;
     private final UserRepository userRepository;
     private final MessageResponseMapper messageResponseMapper;
     private final MessageReadStatusService messageReadStatusService;
 
-    private static final int BATCH_SIZE = 30;
-
     /**
      * 메시지 로드
      */
-    public FetchMessagesResponse loadMessages(FetchMessagesRequest data, String userId) {
-        try {
-            return loadMessagesInternal(data.roomId(), data.limit(BATCH_SIZE), data.before(LocalDateTime.now()), userId);
-        } catch (Exception e) {
-            log.error("Error loading initial messages for room {}", data.roomId(), e);
-            return FetchMessagesResponse.builder()
-                    .messages(emptyList())
-                    .hasMore(false)
-                    .build();
+    public FetchMessagesResponse loadMessages(
+            FetchMessagesRequest data,
+            String userId
+    ) {
+        if (data == null) {
+            throw new IllegalArgumentException("메시지 조회 요청은 필수입니다.");
         }
+
+        int limit = Math.min(data.limit(BATCH_SIZE), MAX_BATCH_SIZE);
+
+        if (data.cursor() != null && !data.cursor().isValid()) {
+            throw new IllegalArgumentException(
+                    "timestamp와 messageId가 모두 포함된 cursor가 필요합니다."
+            );
+        }
+
+        if (data.hasCursor()
+                || data.before() == null
+                || data.before() <= 0) {
+            return loadKeysetMessages(
+                    data.roomId(),
+                    limit,
+                    data.cursor(),
+                    userId
+            );
+        }
+
+        return loadLegacyMessages(
+                data.roomId(),
+                limit,
+                data.before(LocalDateTime.now()),
+                userId
+        );
     }
 
-    private FetchMessagesResponse loadMessagesInternal(
+    private FetchMessagesResponse loadKeysetMessages(
+            String roomId,
+            int limit,
+            @Nullable MessageCursor cursor,
+            String userId
+    ) {
+        int fetchSize = limit + 1;
+
+        List<Message> fetchedMessages = messageRepository.findOlderMessages(
+                roomId,
+                cursor,
+                fetchSize
+        );
+
+        boolean hasMore = fetchedMessages.size() > limit;
+        int responseSize = Math.min(fetchedMessages.size(), limit);
+        List<Message> messages = new ArrayList<>(
+                fetchedMessages.subList(0, responseSize)
+        );
+        MessageCursor nextCursor = createNextCursor(messages, hasMore);
+
+        return createResponse(
+                roomId,
+                limit,
+                messages,
+                hasMore,
+                nextCursor,
+                cursor == null,
+                userId
+        );
+    }
+
+    private FetchMessagesResponse loadLegacyMessages(
             String roomId,
             int limit,
             LocalDateTime before,
-            String userId) {
-        Pageable pageable = PageRequest.of(0, limit, Sort.by("timestamp").descending());
+            String userId
+    ) {
+        Pageable pageable = PageRequest.of(
+                0,
+                limit,
+                Sort.by("timestamp").descending()
+        );
 
-        Page<Message> messagePage = messageRepository
-                .findByRoomIdAndTimestampBefore(roomId, before, pageable);
+        Page<Message> messagePage =
+                messageRepository.findByRoomIdAndTimestampBefore(
+                        roomId,
+                        before,
+                        pageable
+                );
 
-        List<Message> messages = messagePage.getContent();
+        boolean hasMore = messagePage.hasNext();
+        List<Message> messages = new ArrayList<>(messagePage.getContent());
+        MessageCursor nextCursor = createNextCursor(messages, hasMore);
 
-        // DESC로 조회했으므로 ASC로 재정렬 (채팅 UI 표시 순서)
-        List<Message> sortedMessages = messages.reversed();
+        return createResponse(
+                roomId,
+                limit,
+                messages,
+                hasMore,
+                nextCursor,
+                false,
+                userId
+        );
+    }
 
-        // [CHANGED] handler/MessageLoader.java: 예전엔 조회된 메시지 ID를 전부 모아
-        // updateReadStatus(messageIds, userId)로 넘겨 메시지 개수만큼 DB에 쓰기를 반복했다.
-        // Last Read Watermark 방식에서는 "이 배치에서 가장 최신 메시지"까지만 워터마크를
-        // 전진시키면 그 이전 메시지는 전부 읽은 것으로 간주되므로, 마지막 메시지 1건의
-        // id/timestamp만 넘긴다.
-        if (!sortedMessages.isEmpty()) {
+    private FetchMessagesResponse createResponse(
+            String roomId,
+            int limit,
+            List<Message> messagesDescending,
+            boolean hasMore,
+            @Nullable MessageCursor nextCursor,
+            boolean updateReadWatermark,
+            String userId
+    ) {
+        List<Message> sortedMessages = new ArrayList<>(messagesDescending);
+        Collections.reverse(sortedMessages);
+
+        if (updateReadWatermark && !sortedMessages.isEmpty()) {
             Message latestInBatch = sortedMessages.getLast();
             messageReadStatusService.updateReadStatus(
-                    roomId, userId, latestInBatch.getId(), latestInBatch.getTimestamp());
+                    roomId,
+                    userId,
+                    latestInBatch.getId(),
+                    latestInBatch.getTimestamp()
+            );
         }
 
-        // 메시지 응답 생성
         Map<String, User> usersById = loadUsers(sortedMessages);
         List<MessageResponse> messageResponses = messageResponseMapper
                 .mapToMessageResponses(sortedMessages, usersById);
 
-        boolean hasMore = messagePage.hasNext();
-
-        log.debug("Messages loaded - roomId: {}, limit: {}, count: {}, hasMore: {}",
-                roomId, limit, messageResponses.size(), hasMore);
+        log.debug(
+                "Messages loaded - roomId: {}, limit: {}, count: {}, "
+                        + "hasMore: {}, nextCursor: {}",
+                roomId,
+                limit,
+                messageResponses.size(),
+                hasMore,
+                nextCursor
+        );
 
         return FetchMessagesResponse.builder()
                 .messages(messageResponses)
                 .hasMore(hasMore)
+                .nextCursor(nextCursor)
                 .build();
+    }
+
+    @Nullable
+    private MessageCursor createNextCursor(
+            List<Message> messagesDescending,
+            boolean hasMore
+    ) {
+        if (!hasMore || messagesDescending.isEmpty()) {
+            return null;
+        }
+
+        Message oldestMessage = messagesDescending.getLast();
+        return new MessageCursor(
+                oldestMessage.toTimestampMillis(),
+                oldestMessage.getId()
+        );
     }
 
     private Map<String, User> loadUsers(List<Message> messages) {

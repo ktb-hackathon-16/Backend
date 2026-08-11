@@ -12,7 +12,9 @@ import org.springframework.data.mongodb.repository.Query;
 import org.springframework.stereotype.Repository;
 
 @Repository
-public interface MessageRepository extends MongoRepository<Message, String> {
+public interface MessageRepository
+        extends MongoRepository<Message, String>,
+        MessagePaginationRepository {
     Page<Message> findByRoomIdAndTimestampBefore(String roomId, LocalDateTime timestamp, Pageable pageable);
     /**
      * 특정 시간 이후의 메시지 수 카운트
