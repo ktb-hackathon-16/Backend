@@ -20,5 +20,7 @@ public class MessagesReadResponse {
     private String userId;
     private String roomId;
     private String lastReadMessageId;
-    private java.time.LocalDateTime lastReadAt;
+    // [FIX] lastReadAt을 epoch millis (long)로 변경. Jackson이 LocalDateTime을 JSON 배열로 직렬화하는 문제 해결.
+    // 프론트의 new Date(array)가 Invalid Date를 생성하는 버그 방지.
+    private long lastReadAt;
 }
