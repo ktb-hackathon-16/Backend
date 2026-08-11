@@ -16,6 +16,7 @@ import com.ktb.chatapp.repository.UserRepository;
 import com.ktb.chatapp.util.BannedWordChecker;
 import com.ktb.chatapp.websocket.socketio.ai.AiService;
 import com.ktb.chatapp.service.RoomActivityNotifier;
+import com.ktb.chatapp.service.RecentMessageCounter;
 import com.ktb.chatapp.service.SessionService;
 import com.ktb.chatapp.service.SessionValidationResult;
 import com.ktb.chatapp.service.RateLimitService;
@@ -47,6 +48,7 @@ public class ChatMessageHandler {
     private final AiService aiService;
     private final SessionService sessionService;
     private final RoomActivityNotifier roomActivityNotifier;
+    private final RecentMessageCounter recentMessageCounter;
     private final BannedWordChecker bannedWordChecker;
     private final RateLimitService rateLimitService;
     private final MeterRegistry meterRegistry;
@@ -162,6 +164,7 @@ public class ChatMessageHandler {
             }
 
             Message savedMessage = messageRepository.save(message);
+            recentMessageCounter.recordMessage(savedMessage);
             MessageResponse messageResponse = createMessageResponse(savedMessage, sender);
 
             socketIOServer.getRoomOperations(roomId)

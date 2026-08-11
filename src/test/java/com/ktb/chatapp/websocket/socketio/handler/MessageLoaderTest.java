@@ -3,7 +3,6 @@ package com.ktb.chatapp.websocket.socketio.handler;
 import com.ktb.chatapp.dto.FetchMessagesRequest;
 import com.ktb.chatapp.dto.FetchMessagesResponse;
 import com.ktb.chatapp.model.Message;
-import com.ktb.chatapp.model.User;
 import com.ktb.chatapp.repository.FileRepository;
 import com.ktb.chatapp.repository.MessageRepository;
 import com.ktb.chatapp.repository.UserRepository;
@@ -25,6 +24,7 @@ import java.util.List;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -64,12 +64,6 @@ class MessageLoaderTest {
                 messageReadStatusService
         );
         
-        var testUser = User.builder()
-                .id(userId)
-                .name(faker.name().fullName())
-                .email(faker.internet().emailAddress())
-                .build();
-        
         // 테스트 메시지 50개 생성 (오름차순: 오래된 것 → 최신 것)
         // i=0: 50시간 전, i=1: 49시간 전, ... i=49: 1시간 전
         testMessages = IntStream.range(0, 50)
@@ -79,12 +73,6 @@ class MessageLoaderTest {
                 ))
                 .toList();
         
-        lenient().when(userRepository.findAllById(anySet()))
-                .thenReturn(List.of(testUser));
-        // [CHANGED] test/.../MessageLoaderTest.java: updateReadStatus 시그니처가
-        // (roomId, userId, lastReadMessageId, lastReadAt)로 바뀐 것에 맞춰 스텁 수정.
-        lenient().doNothing().when(messageReadStatusService)
-                .updateReadStatus(anyString(), anyString(), anyString(), any(LocalDateTime.class));
     }
     
     private Message createMessage(String id, LocalDateTime timestamp) {
@@ -112,7 +100,8 @@ class MessageLoaderTest {
                 .thenReturn(messagePage);
         
         // When: 메시지 로드
-        FetchMessagesRequest req = new FetchMessagesRequest(roomId, 30, null);
+        FetchMessagesRequest req = new FetchMessagesRequest(
+                roomId, 30, System.currentTimeMillis());
         FetchMessagesResponse result = messageLoader.loadMessages(req, userId);
         
         // Then: 결과는 오름차순으로 정렬되어야 함
@@ -135,16 +124,13 @@ class MessageLoaderTest {
     @Test
     @DisplayName("loadInitialMessages: 내림차순 조회 후 오름차순 재정렬")
     void loadInitialMessages_shouldReturnAscendingOrderAfterReversing() {
-        // Given: testMessages[20~49] (30시간 전 ~ 1시간 전) - 최신 30개 메시지
-        List<Message> last30Messages = testMessages.subList(20, 50);
-        
-        // DB는 DESC 정렬로 반환 (최신 것부터)
-        // [1시간 전, 2시간 전, ..., 30시간 전]
-        Page<Message> messagePage = getMessagePage(last30Messages);
-        
-        when(messageRepository.findByRoomIdAndTimestampBefore(
-                eq(roomId), any(LocalDateTime.class), any(Pageable.class)))
-                .thenReturn(messagePage);
+        // Given: testMessages[19~49] (31개) - 최신 30개와 hasMore 판정용 1개
+        List<Message> latest31Messages = testMessages.subList(19, 50);
+
+        // keyset repository는 최신 메시지부터 반환한다고 가정
+        when(messageRepository.findOlderMessages(
+                eq(roomId), isNull(), eq(31)))
+                .thenReturn(new ArrayList<>(latest31Messages.reversed()));
         
         // When: 초기 메시지 로드
         FetchMessagesRequest req = new FetchMessagesRequest(roomId, 30, null);
@@ -152,6 +138,7 @@ class MessageLoaderTest {
         
         // Then: 결과는 오름차순으로 정렬되어야 함
         assertThat(result.getMessages()).hasSize(30);
+        assertThat(result.isHasMore()).isTrue();
         
         // 시간순 정렬 확인 (오름차순: 오래된 것 → 최신 것)
         // [30시간 전, 29시간 전, ..., 1시간 전]
@@ -167,16 +154,16 @@ class MessageLoaderTest {
     }
     
     @Test
-    @DisplayName("loadInitialMessages: 에러 시 빈 응답")
-    void loadInitialMessages_shouldReturnEmptyOnError() {
-        when(messageRepository.findByRoomIdAndTimestampBefore(
-                any(), any(LocalDateTime.class), any(Pageable.class)))
+    @DisplayName("loadInitialMessages: 조회 오류를 호출자에게 전달")
+    void loadInitialMessages_shouldPropagateError() {
+        when(messageRepository.findOlderMessages(
+                eq(roomId), isNull(), eq(31)))
                 .thenThrow(new RuntimeException("DB error"));
         
         FetchMessagesRequest req = new FetchMessagesRequest(roomId, 30, null);
-        FetchMessagesResponse result = messageLoader.loadMessages(req, userId);
         
-        assertThat(result.getMessages()).isEmpty();
-        assertThat(result.isHasMore()).isFalse();
+        assertThatThrownBy(() -> messageLoader.loadMessages(req, userId))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessage("DB error");
     }
 }

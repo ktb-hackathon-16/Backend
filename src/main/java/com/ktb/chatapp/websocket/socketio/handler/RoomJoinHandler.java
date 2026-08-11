@@ -16,6 +16,7 @@ import com.ktb.chatapp.repository.MessageRepository;
 import com.ktb.chatapp.repository.ReadReceiptRepository;
 import com.ktb.chatapp.repository.RoomRepository;
 import com.ktb.chatapp.repository.UserRepository;
+import com.ktb.chatapp.service.RecentMessageCounter;
 import com.ktb.chatapp.websocket.socketio.SocketUser;
 import com.ktb.chatapp.websocket.socketio.UserRooms;
 import java.time.LocalDateTime;
@@ -49,6 +50,7 @@ public class RoomJoinHandler {
     // [ADDED] handler/RoomJoinHandler.java: 방 입장 시 참가자별 읽음 워터마크 스냅샷을
     // 내려주기 위해 추가. 참고: model/ReadReceipt.java, dto/ParticipantReadState.java
     private final ReadReceiptRepository readReceiptRepository;
+    private final RecentMessageCounter recentMessageCounter;
     
     @OnEvent(JOIN_ROOM)
     public void handleJoinRoom(SocketIOClient client, String roomId) {
@@ -98,6 +100,7 @@ public class RoomJoinHandler {
                 .build();
 
             joinMessage = messageRepository.save(joinMessage);
+            recentMessageCounter.recordMessage(joinMessage);
 
             // 초기 메시지 로드
             FetchMessagesRequest req = new FetchMessagesRequest(roomId, 30, null);
