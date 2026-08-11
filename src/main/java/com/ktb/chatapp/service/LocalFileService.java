@@ -18,10 +18,15 @@ public class LocalFileService implements FileService {
 
     private final StoragePort storagePort;
     private final FileRepository fileRepository;
+    private final ImageVariantService imageVariantService;
 
-    public LocalFileService(StoragePort storagePort, FileRepository fileRepository) {
+    public LocalFileService(
+            StoragePort storagePort,
+            FileRepository fileRepository,
+            ImageVariantService imageVariantService) {
         this.storagePort = storagePort;
         this.fileRepository = fileRepository;
+        this.imageVariantService = imageVariantService;
     }
 
     @Override
@@ -41,6 +46,7 @@ public class LocalFileService implements FileService {
             // 파일 저장 (채팅 첨부는 chat/ key로 저장)
             String key = StorageKey.chat(safeFileName);
             storagePort.put(file.getInputStream(), key, file.getContentType(), file.getSize());
+            var variants = imageVariantService.storeChatVariants(file, safeFileName);
 
             log.info("파일 저장 완료: {}", safeFileName);
 
@@ -54,6 +60,10 @@ public class LocalFileService implements FileService {
                     .mimetype(file.getContentType())
                     .size(file.getSize())
                     .path(key)
+                    .previewPath(variants.map(ImageVariantService.ChatImageVariants::previewPath).orElse(null))
+                    .previewSize(variants.map(ImageVariantService.ChatImageVariants::previewSize).orElse(0L))
+                    .thumbnailPath(variants.map(ImageVariantService.ChatImageVariants::thumbnailPath).orElse(null))
+                    .thumbnailSize(variants.map(ImageVariantService.ChatImageVariants::thumbnailSize).orElse(0L))
                     .user(uploaderId)
                     .uploadDate(LocalDateTime.now())
                     .build();
@@ -116,6 +126,8 @@ public class LocalFileService implements FileService {
 
             // 물리적 파일 삭제
             storagePort.delete(fileEntity.getPath());
+            deleteVariant(fileEntity.getPreviewPath());
+            deleteVariant(fileEntity.getThumbnailPath());
 
             // 데이터베이스에서 제거
             fileRepository.delete(fileEntity);
@@ -126,6 +138,17 @@ public class LocalFileService implements FileService {
         } catch (Exception e) {
             log.error("파일 삭제 실패: {}", e.getMessage(), e);
             throw new RuntimeException("파일 삭제 중 오류가 발생했습니다.", e);
+        }
+    }
+
+    private void deleteVariant(String key) {
+        if (key == null || key.isBlank()) {
+            return;
+        }
+        try {
+            storagePort.delete(key);
+        } catch (RuntimeException e) {
+            log.warn("파일 variant 삭제 실패: {} ({})", key, e.getMessage());
         }
     }
 }

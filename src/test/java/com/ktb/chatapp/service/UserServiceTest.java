@@ -4,11 +4,15 @@ import com.ktb.chatapp.dto.ProfileImageResponse;
 import com.ktb.chatapp.model.User;
 import com.ktb.chatapp.repository.UserRepository;
 import com.ktb.chatapp.storage.LocalStorage;
+import com.ktb.chatapp.storage.StoragePort;
 
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
+import javax.imageio.ImageIO;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -21,8 +25,6 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -33,9 +35,6 @@ class UserServiceTest {
 
     @Mock
     private UserRepository userRepository;
-
-    @Mock
-    private FileService fileService;
 
     private UserService userService;
 
@@ -48,7 +47,8 @@ class UserServiceTest {
      */
     @BeforeEach
     void setUp() {
-        userService = new UserService(userRepository, fileService, new LocalStorage(uploadDir.toString()));
+        StoragePort storagePort = new LocalStorage(uploadDir.toString());
+        userService = new UserService(userRepository, new ImageVariantService(storagePort));
         ReflectionTestUtils.setField(userService, "maxProfileImageSize", 5242880L);
     }
 
@@ -70,15 +70,15 @@ class UserServiceTest {
                 .profileImage("profiles/old.jpg")
                 .build();
         when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user));
-        when(fileService.storeFile(any(), eq("profiles"))).thenReturn("profiles/new.jpg");
         MockMultipartFile file = new MockMultipartFile(
-                "file", "new.jpg", "image/jpeg", "new-image-bytes".getBytes());
+                "file", "new.jpg", "image/jpeg", jpegBytes());
 
         ProfileImageResponse response = userService.uploadProfileImage(EMAIL, file);
 
         assertThat(Files.exists(oldFile)).isFalse();
-        assertThat(user.getProfileImage()).isEqualTo("profiles/new.jpg");
-        assertThat(response.getImageUrl()).isEqualTo("/api/files/profiles/new.jpg");
+        assertThat(user.getProfileImage()).startsWith("media/profiles/user-1/");
+        assertThat(user.getProfileImage()).endsWith("-avatar-128.jpg");
+        assertThat(response.getImageUrl()).isEqualTo("/" + user.getProfileImage());
     }
 
     @Test
@@ -96,5 +96,12 @@ class UserServiceTest {
 
         assertThat(Files.exists(oldFile)).isFalse();
         assertThat(user.getProfileImage()).isEmpty();
+    }
+
+    private byte[] jpegBytes() throws IOException {
+        BufferedImage image = new BufferedImage(4, 4, BufferedImage.TYPE_INT_RGB);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        ImageIO.write(image, "jpg", output);
+        return output.toByteArray();
     }
 }

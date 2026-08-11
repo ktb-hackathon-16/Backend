@@ -2,6 +2,7 @@ package com.ktb.chatapp.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.ktb.chatapp.model.File;
+import com.ktb.chatapp.service.FileUrl;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -20,6 +21,10 @@ public class FileResponse {
     private String originalname;
     private String mimetype;
     private long size;
+    private String previewUrl;
+    private long previewSize;
+    private String thumbnailUrl;
+    private long thumbnailSize;
     private String user;
     private LocalDateTime uploadDate;
 
@@ -31,6 +36,10 @@ public class FileResponse {
                 .originalname(file.getOriginalname())
                 .mimetype(file.getMimetype())
                 .size(file.getSize())
+                .previewUrl(FileUrl.publicMediaOf(file.getPreviewPath()))
+                .previewSize(file.getPreviewSize())
+                .thumbnailUrl(FileUrl.publicMediaOf(file.getThumbnailPath()))
+                .thumbnailSize(file.getThumbnailSize())
                 .user(file.getUser())
                 .uploadDate(file.getUploadDate())
                 .build();

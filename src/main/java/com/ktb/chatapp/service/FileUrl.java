@@ -21,6 +21,16 @@ public final class FileUrl {
         if (key == null || key.isEmpty()) {
             return key;
         }
+        if (key.startsWith("media/")) {
+            return "/" + key;
+        }
         return PREFIX + key;
+    }
+
+    public static String publicMediaOf(String key) {
+        if (key == null || key.isEmpty() || !key.startsWith("media/")) {
+            return null;
+        }
+        return "/" + key;
     }
 }
