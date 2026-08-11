@@ -162,6 +162,17 @@ class ChatMessageHandlerTest {
         ArgumentCaptor<MessageResponse> payloadCaptor = ArgumentCaptor.forClass(MessageResponse.class);
         verify(roomOperations).sendEvent(eq(MESSAGE), payloadCaptor.capture());
         verify(client, never()).sendEvent(eq(MESSAGE), any(MessageResponse.class));
+
+        // 세션 검증과 TTL 갱신은 한 번 실행되어야 한다.
+        verify(sessionService, times(1))
+                .validateSession(
+                        socketUser.id(),
+                        socketUser.authSessionId());
+
+        // 처리 마지막의 중복 활동 갱신은 실행되지 않아야 한다.
+        verify(sessionService, never())
+                .updateLastActivity(anyString());
+
         verify(roomActivityNotifier).notifyMessageStored("room-1");
         org.junit.jupiter.api.Assertions.assertEquals("message-1", payloadCaptor.getValue().getId());
         org.junit.jupiter.api.Assertions.assertEquals("hello", payloadCaptor.getValue().getContent());
