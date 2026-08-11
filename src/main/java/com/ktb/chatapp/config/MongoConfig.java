@@ -18,7 +18,7 @@ public class MongoConfig {
     public ApplicationRunner ensureMongoIndexes(MongoTemplate mongoTemplate) {
         return args -> {
             ensureIndex(mongoTemplate, "users",
-                    new Index().on("email", Direction.ASC).unique().named("email_unique_idx"));
+                    new Index().on("email", Direction.ASC).unique().named("email"));
             ensureIndex(mongoTemplate, "rooms",
                     new Index().on("createdAt", Direction.DESC).named("created_at_desc_idx"));
             ensureIndex(mongoTemplate, "messages",
