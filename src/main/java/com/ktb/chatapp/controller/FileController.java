@@ -1,6 +1,7 @@
 package com.ktb.chatapp.controller;
 
 import com.ktb.chatapp.dto.StandardResponse;
+import com.ktb.chatapp.dto.FileResponse;
 import com.ktb.chatapp.dto.PresignedUploadCompleteRequest;
 import com.ktb.chatapp.dto.PresignedUploadRequest;
 import com.ktb.chatapp.model.User;
@@ -63,7 +64,7 @@ public class FileController {
         @ApiResponse(responseCode = "500", description = "서버 내부 오류",
             content = @Content(schema = @Schema(implementation = StandardResponse.class)))
     })
-    @PostMapping("/upload")
+    @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<?> uploadFile(
             @Parameter(description = "업로드할 파일") @RequestParam("file") MultipartFile file,
             Principal principal) {
@@ -107,6 +108,32 @@ public class FileController {
             errorResponse.put("message", "파일 업로드 중 오류가 발생했습니다.");
             errorResponse.put("error", e.getMessage());
             return ResponseEntity.status(500).body(errorResponse);
+        }
+    }
+
+    @Operation(summary = "S3 직접 업로드 호환 응답", description = "presigned 업로드 완료 파일을 기존 /upload 응답 형태로 반환합니다.")
+    @PostMapping(value = "/upload", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<?> uploadCompletedFile(
+            @Valid @RequestBody PresignedUploadCompleteRequest request,
+            Principal principal) {
+        try {
+            S3DirectUploadService directUploadService = requireDirectUploadService();
+            User user = currentUser(principal);
+            FileResponse file = directUploadService.completeUpload(request.fileId(), user.getId());
+
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "파일 업로드 성공",
+                    "file", file));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "message", e.getMessage()));
+        } catch (Exception e) {
+            log.error("presigned upload 호환 응답 처리 중 에러 발생", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
+                    "success", false,
+                    "message", "파일 업로드 중 오류가 발생했습니다."));
         }
     }
 
