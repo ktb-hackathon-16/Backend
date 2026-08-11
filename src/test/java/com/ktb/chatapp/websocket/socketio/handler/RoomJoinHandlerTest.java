@@ -14,6 +14,7 @@ import com.ktb.chatapp.repository.MessageRepository;
 import com.ktb.chatapp.repository.ReadReceiptRepository;
 import com.ktb.chatapp.repository.RoomRepository;
 import com.ktb.chatapp.repository.UserRepository;
+import com.ktb.chatapp.service.RecentMessageCounter;
 import com.ktb.chatapp.websocket.socketio.SocketUser;
 import com.ktb.chatapp.websocket.socketio.UserRooms;
 import java.time.LocalDateTime;
@@ -49,6 +50,7 @@ class RoomJoinHandlerTest {
     // [ADDED] test/.../RoomJoinHandlerTest.java: RoomJoinHandler 생성자에 추가된
     // ReadReceiptRepository 의존성 (참가자별 읽음 워터마크 스냅샷 조회용).
     @Mock private ReadReceiptRepository readReceiptRepository;
+    @Mock private RecentMessageCounter recentMessageCounter;
     @Mock private SocketIOClient client;
     @Mock private BroadcastOperations roomOperations;
 
@@ -65,7 +67,8 @@ class RoomJoinHandlerTest {
                 messageLoader,
                 messageResponseMapper,
                 roomLeaveHandler,
-                readReceiptRepository);
+                readReceiptRepository,
+                recentMessageCounter);
     }
 
     @Test
