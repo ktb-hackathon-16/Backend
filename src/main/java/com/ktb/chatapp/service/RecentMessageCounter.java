@@ -143,12 +143,12 @@ public class RecentMessageCounter {
         }
 
         Set<String> roomKeys = seeds.stream()
-                .map(MessageRepository.RecentMessageSeed::getRoom)
+                .map(MessageRepository.RecentMessageSeed::getRoomId)
                 .map(this::key)
                 .collect(Collectors.toSet());
         redisTemplate.executePipelined((RedisCallback<Object>) connection -> {
             for (MessageRepository.RecentMessageSeed seed : seeds) {
-                byte[] roomKey = serialize(key(seed.getRoom()));
+                byte[] roomKey = serialize(key(seed.getRoomId()));
                 byte[] messageId = serialize(seed.getId());
                 connection.zAdd(
                         roomKey,
@@ -197,9 +197,9 @@ public class RecentMessageCounter {
 
     private Map<String, Integer> countFromMongo(List<String> roomIds, LocalDateTime since) {
         return messageRepository.countRecentMessagesByRoomIds(roomIds, since).stream()
-                .filter(count -> count.getRoom() != null)
+                .filter(count -> count.getRoomId() != null)
                 .collect(Collectors.toMap(
-                        MessageRepository.RecentMessageCount::getRoom,
+                        MessageRepository.RecentMessageCount::getRoomId,
                         count -> (int) count.getCount(),
                         Integer::sum));
     }

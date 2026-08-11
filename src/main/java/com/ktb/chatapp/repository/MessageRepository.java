@@ -26,7 +26,7 @@ public interface MessageRepository
     @Aggregation(pipeline = {
             "{ '$match': { 'room': { '$in': ?0 }, 'timestamp': { '$gte': ?1 } } }",
             "{ '$group': { '_id': '$room', 'count': { '$sum': 1 } } }",
-            "{ '$project': { '_id': 0, 'room': '$_id', 'count': 1 } }"
+            "{ '$project': { '_id': 0, 'roomId': '$_id', 'count': 1 } }"
     })
     List<RecentMessageCount> countRecentMessagesByRoomIds(List<String> roomIds, LocalDateTime since);
 
@@ -35,7 +35,7 @@ public interface MessageRepository
     List<RecentMessageSeed> findRecentMessageSeedsByRoomIds(List<String> roomIds, LocalDateTime since);
 
     interface RecentMessageCount {
-        String getRoom();
+        String getRoomId();
 
         long getCount();
     }
@@ -43,7 +43,7 @@ public interface MessageRepository
     interface RecentMessageSeed {
         String getId();
 
-        String getRoom();
+        String getRoomId();
 
         LocalDateTime getTimestamp();
     }
