@@ -3,17 +3,12 @@ package com.ktb.chatapp.websocket.socketio.handler;
 import com.corundumstudio.socketio.SocketIOClient;
 import com.corundumstudio.socketio.SocketIOServer;
 import com.corundumstudio.socketio.annotation.OnEvent;
-import com.ktb.chatapp.dto.FetchMessagesRequest;
-import com.ktb.chatapp.dto.FetchMessagesResponse;
-import com.ktb.chatapp.dto.JoinRoomSuccessResponse;
-import com.ktb.chatapp.dto.ParticipantReadState;
 import com.ktb.chatapp.dto.UserResponse;
 import com.ktb.chatapp.model.Message;
 import com.ktb.chatapp.model.MessageType;
 import com.ktb.chatapp.model.Room;
 import com.ktb.chatapp.model.User;
 import com.ktb.chatapp.repository.MessageRepository;
-import com.ktb.chatapp.repository.ReadReceiptRepository;
 import com.ktb.chatapp.repository.RoomRepository;
 import com.ktb.chatapp.repository.UserRepository;
 import com.ktb.chatapp.service.RecentMessageCounter;
@@ -44,12 +39,8 @@ public class RoomJoinHandler {
     private final RoomRepository roomRepository;
     private final UserRepository userRepository;
     private final UserRooms userRooms;
-    private final MessageLoader messageLoader;
     private final MessageResponseMapper messageResponseMapper;
     private final RoomLeaveHandler roomLeaveHandler;
-    // [ADDED] handler/RoomJoinHandler.java: 방 입장 시 참가자별 읽음 워터마크 스냅샷을
-    // 내려주기 위해 추가. 참고: model/ReadReceipt.java, dto/ParticipantReadState.java
-    private final ReadReceiptRepository readReceiptRepository;
     private final RecentMessageCounter recentMessageCounter;
     
     @OnEvent(JOIN_ROOM)
@@ -86,6 +77,7 @@ public class RoomJoinHandler {
             // Join socket room and add to user's room set
             client.joinRoom(roomId);
             userRooms.add(userId, roomId);
+            client.sendEvent(JOIN_ROOM_SUCCESS, Map.of("roomId", roomId));
 
             // [CHANGED] handler/RoomJoinHandler.java: .readers(new ArrayList<>()) 제거.
             // Message 모델에 readers 필드가 더는 없다 (Last Read Watermark 방식).
@@ -102,41 +94,15 @@ public class RoomJoinHandler {
             joinMessage = messageRepository.save(joinMessage);
             recentMessageCounter.recordMessage(joinMessage);
 
-            // 초기 메시지 로드
-            FetchMessagesRequest req = new FetchMessagesRequest(roomId, 30, null);
-            FetchMessagesResponse messageLoadResult = messageLoader.loadMessages(req, userId);
-
             // 업데이트된 room 다시 조회하여 최신 participantIds 가져오기
             Optional<Room> roomOpt = roomRepository.findById(roomId);
             if (roomOpt.isEmpty()) {
-                client.sendEvent(JOIN_ROOM_ERROR, Map.of("message", "채팅방을 찾을 수 없습니다."));
+                log.warn("Room disappeared after socket join: roomId={}", roomId);
                 return;
             }
 
             // 참가자 정보 조회
             List<UserResponse> participants = loadParticipants(roomOpt.get());
-            
-            // [ADDED] handler/RoomJoinHandler.java: 참가자별 읽음 워터마크 스냅샷 조회.
-            // 프론트는 이 값으로 room.readReceipts를 초기화하고, 이후로는
-            // messagesRead 브로드캐스트(MessageReadHandler)만으로 갱신한다.
-            // [FIX] lastReadAt은 epoch millis로 변환해서 내보낸다 (dto/ParticipantReadState 주석 참고).
-            List<ParticipantReadState> participantReadStates = readReceiptRepository.findByRoomId(roomId)
-                    .stream()
-                    .map(receipt -> new ParticipantReadState(
-                            receipt.getUserId(), receipt.getLastReadMessageId(), receipt.toLastReadAtMillis()))
-                    .toList();
-
-            JoinRoomSuccessResponse response = JoinRoomSuccessResponse.builder()
-                .roomId(roomId)
-                .participants(participants)
-                .messages(messageLoadResult.getMessages())
-                .hasMore(messageLoadResult.isHasMore())
-                .nextCursor(messageLoadResult.getNextCursor())
-                .activeStreams(Collections.emptyList())
-                .participantReadStates(participantReadStates)
-                .build();
-
-            client.sendEvent(JOIN_ROOM_SUCCESS, response);
 
             // 입장 메시지 브로드캐스트
             socketIOServer.getRoomOperations(roomId)
@@ -146,8 +112,7 @@ public class RoomJoinHandler {
             socketIOServer.getRoomOperations(roomId)
                 .sendEvent(PARTICIPANTS_UPDATE, participants);
 
-            log.info("User {} joined room {} successfully. Message count: {}, hasMore: {}",
-                userName, roomId, messageLoadResult.getMessages().size(), messageLoadResult.isHasMore());
+            log.info("User {} joined room {} successfully.", userName, roomId);
 
         } catch (Exception e) {
             log.error("Error handling joinRoom", e);

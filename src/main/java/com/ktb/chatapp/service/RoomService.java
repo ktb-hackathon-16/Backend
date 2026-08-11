@@ -2,7 +2,6 @@ package com.ktb.chatapp.service;
 
 import com.ktb.chatapp.dto.*;
 import com.ktb.chatapp.event.RoomCreatedEvent;
-import com.ktb.chatapp.event.RoomUpdatedEvent;
 import com.ktb.chatapp.model.Room;
 import com.ktb.chatapp.model.User;
 import com.ktb.chatapp.repository.RoomRepository;
@@ -212,15 +211,7 @@ public class RoomService {
             room = roomRepository.save(room);
         }
         
-        // Publish event for room updated
-        try {
-            RoomResponse roomResponse = mapToRoomResponse(room, name);
-            eventPublisher.publishEvent(new RoomUpdatedEvent(this, roomId, roomResponse));
-            return new RoomOperationResult(room, roomResponse);
-        } catch (Exception e) {
-            log.error("roomUpdate 이벤트 발행 실패", e);
-            return new RoomOperationResult(room, null);
-        }
+        return new RoomOperationResult(room, null);
     }
 
     public record RoomOperationResult(Room room, RoomResponse response) {

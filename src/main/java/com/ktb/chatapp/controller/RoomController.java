@@ -236,23 +236,18 @@ public class RoomController {
             @RequestBody JoinRoomRequest joinRoomRequest,
             Principal principal) {
         try {
-            RoomService.RoomOperationResult result = roomService.joinRoomWithResponse(
+            Room room = roomService.joinRoom(
                     roomId, joinRoomRequest.getPassword(), principal.getName());
 
-            if (result.room() == null) {
+            if (room == null) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(StandardResponse.error("채팅방을 찾을 수 없습니다."));
-            }
-
-            RoomResponse roomResponse = result.response();
-            if (roomResponse == null) {
-                roomResponse = roomService.mapToRoomResponse(result.room(), principal.getName());
             }
             
             return ResponseEntity.ok(
                 Map.of(
                     "success", true,
-                    "data", roomResponse
+                    "data", Map.of("roomId", room.getId())
                 )
             );
 
