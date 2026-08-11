@@ -163,12 +163,12 @@ public class RecentMessageCounter {
         }
 
         Set<String> roomKeys = seeds.stream()
-                .map(MessageRepository.RecentMessageSeed::getRoom)
+                .map(MessageRepository.RecentMessageSeed::getRoomId)
                 .map(this::key)
                 .collect(Collectors.toSet());
         redisTemplate.executePipelined((RedisCallback<Object>) connection -> {
             for (MessageRepository.RecentMessageSeed seed : seeds) {
-                byte[] roomKey = serialize(key(seed.getRoom()));
+                byte[] roomKey = serialize(key(seed.getRoomId()));
                 byte[] messageId = serialize(seed.getId());
                 connection.zAdd(
                         roomKey,
