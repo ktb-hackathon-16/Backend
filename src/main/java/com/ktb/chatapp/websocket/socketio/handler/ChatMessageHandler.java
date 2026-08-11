@@ -28,8 +28,12 @@ import io.micrometer.core.instrument.Timer;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.Executor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -52,7 +56,9 @@ public class ChatMessageHandler {
     private final BannedWordChecker bannedWordChecker;
     private final RateLimitService rateLimitService;
     private final MeterRegistry meterRegistry;
-    
+    @Qualifier("chatMessageLookupExecutor")
+    private final Executor chatMessageLookupExecutor;
+
     @OnEvent(CHAT_MESSAGE)
     public void handleChatMessage(SocketIOClient client, ChatMessageRequest data) {
         Timer.Sample timerSample = Timer.start(meterRegistry);
@@ -112,7 +118,16 @@ public class ChatMessageHandler {
         }
         
         try {
-            User sender = userRepository.findById(socketUser.id()).orElse(null);
+            // 발신자 조회 / 방 조회는 서로의 결과에 의존하지 않으므로 동시에 실행한다.
+            // 다만 둘 다 뒤에서 바로 필요하므로, "안 기다린다"가 아니라
+            // "따로따로 기다리지 않고 겹쳐서 기다린다"가 목적이다.
+            String roomId = data.getRoom();
+            CompletableFuture<Optional<User>> senderLookup = CompletableFuture.supplyAsync(
+                    () -> userRepository.findById(socketUser.id()), chatMessageLookupExecutor);
+            CompletableFuture<Optional<Room>> roomLookup = CompletableFuture.supplyAsync(
+                    () -> roomRepository.findById(roomId), chatMessageLookupExecutor);
+
+            User sender = senderLookup.join().orElse(null);
             if (sender == null) {
                 recordError("user_not_found");
                 client.sendEvent(ERROR, Map.of(
@@ -123,8 +138,7 @@ public class ChatMessageHandler {
                 return;
             }
 
-            String roomId = data.getRoom();
-            Room room = roomRepository.findById(roomId).orElse(null);
+            Room room = roomLookup.join().orElse(null);
             if (room == null || !room.getParticipantIds().contains(socketUser.id())) {
                 recordError("room_access_denied");
                 client.sendEvent(ERROR, Map.of(
@@ -186,11 +200,14 @@ public class ChatMessageHandler {
                 savedMessage.getId(), savedMessage.getType(), roomId);
 
         } catch (Exception e) {
+            // CompletableFuture.join()이 던지는 CompletionException은 실제 원인을 감싸고 있으므로
+            // 로그/클라이언트 메시지에는 원래 원인을 풀어서 보여준다.
+            Throwable cause = (e instanceof CompletionException && e.getCause() != null) ? e.getCause() : e;
             recordError("exception");
-            log.error("Message handling error", e);
+            log.error("Message handling error", cause);
             client.sendEvent(ERROR, Map.of(
                 "code", "MESSAGE_ERROR",
-                "message", e.getMessage() != null ? e.getMessage() : "메시지 전송 중 오류가 발생했습니다."
+                "message", cause.getMessage() != null ? cause.getMessage() : "메시지 전송 중 오류가 발생했습니다."
             ));
             timerSample.stop(createTimer("error", "exception"));
         }
