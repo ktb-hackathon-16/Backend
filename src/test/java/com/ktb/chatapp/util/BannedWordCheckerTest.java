@@ -54,4 +54,13 @@ class BannedWordCheckerTest {
         assertFalse(checker.containsBannedWord(null));
         assertFalse(checker.containsBannedWord("   "));
     }
+
+    @Test
+    void containsBannedWord_matchesCaseInsensitiveAndOverlappingPatterns() {
+        BannedWordChecker checker = new BannedWordChecker(Set.of("he", "she", "his", "hers"));
+
+        assertTrue(checker.containsBannedWord("A SHELL message"));
+        assertTrue(checker.containsBannedWord("herself"));
+        assertFalse(checker.containsBannedWord("safe message"));
+    }
 }
