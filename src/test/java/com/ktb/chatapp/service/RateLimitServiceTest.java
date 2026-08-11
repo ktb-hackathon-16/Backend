@@ -1,7 +1,7 @@
 package com.ktb.chatapp.service;
 
 import com.ktb.chatapp.config.MongoTestContainer;
-import com.ktb.chatapp.repository.RateLimitRepository;
+import com.ktb.chatapp.config.RedisTestContainer;
 import java.time.Duration;
 import java.time.Instant;
 import org.junit.jupiter.api.BeforeEach;
@@ -10,27 +10,30 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.redis.core.RedisCallback;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.test.context.TestPropertySource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
-@Import(MongoTestContainer.class)
-@TestPropertySource(properties = {
-        "socketio.enabled=false"
-})
+@Import({MongoTestContainer.class, RedisTestContainer.class})
+@TestPropertySource(properties = "socketio.enabled=false")
 @DisplayName("RateLimitService 통합 테스트")
 class RateLimitServiceTest {
 
     @Autowired
-    private RateLimitRepository rateLimitRepository;
+    private StringRedisTemplate redisTemplate;
 
     @Autowired
     private RateLimitService rateLimitService;
 
     @BeforeEach
     void setUp() {
-        rateLimitRepository.deleteAll();
+        redisTemplate.execute((RedisCallback<Void>) connection -> {
+            connection.serverCommands().flushDb();
+            return null;
+        });
     }
 
     @Test

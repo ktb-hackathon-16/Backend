@@ -2,6 +2,7 @@ package com.ktb.chatapp.controller;
 
 import tools.jackson.databind.ObjectMapper;
 import com.ktb.chatapp.config.MongoTestContainer;
+import com.ktb.chatapp.config.RedisTestContainer;
 import com.ktb.chatapp.dto.LoginRequest;
 import com.ktb.chatapp.dto.RegisterRequest;
 import com.ktb.chatapp.service.SessionCreationResult;
@@ -27,7 +28,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
-@Import({MongoTestContainer.class})
+@Import({MongoTestContainer.class, RedisTestContainer.class})
 @TestPropertySource(properties = "socketio.enabled=false")
 public class AuthControllerTest {
 
