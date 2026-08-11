@@ -217,9 +217,9 @@ public class RecentMessageCounter {
 
     private Map<String, Integer> countFromMongo(List<String> roomIds, LocalDateTime since) {
         return messageRepository.countRecentMessagesByRoomIds(roomIds, since).stream()
-                .filter(count -> count.getRoom() != null)
+                .filter(count -> count.getRoomId() != null)
                 .collect(Collectors.toMap(
-                        MessageRepository.RecentMessageCount::getRoom,
+                        MessageRepository.RecentMessageCount::getRoomId,
                         count -> (int) count.getCount(),
                         Integer::sum));
     }

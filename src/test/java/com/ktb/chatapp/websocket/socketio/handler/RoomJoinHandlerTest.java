@@ -3,15 +3,12 @@ package com.ktb.chatapp.websocket.socketio.handler;
 import com.corundumstudio.socketio.BroadcastOperations;
 import com.corundumstudio.socketio.SocketIOClient;
 import com.corundumstudio.socketio.SocketIOServer;
-import com.ktb.chatapp.dto.FetchMessagesRequest;
-import com.ktb.chatapp.dto.FetchMessagesResponse;
 import com.ktb.chatapp.dto.MessageResponse;
 import com.ktb.chatapp.model.Message;
 import com.ktb.chatapp.model.MessageType;
 import com.ktb.chatapp.model.Room;
 import com.ktb.chatapp.model.User;
 import com.ktb.chatapp.repository.MessageRepository;
-import com.ktb.chatapp.repository.ReadReceiptRepository;
 import com.ktb.chatapp.repository.RoomRepository;
 import com.ktb.chatapp.repository.UserRepository;
 import com.ktb.chatapp.service.RecentMessageCounter;
@@ -24,6 +21,7 @@ import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -33,6 +31,7 @@ import static com.ktb.chatapp.websocket.socketio.SocketIOEvents.MESSAGE;
 import static com.ktb.chatapp.websocket.socketio.SocketIOEvents.PARTICIPANTS_UPDATE;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -44,12 +43,8 @@ class RoomJoinHandlerTest {
     @Mock private RoomRepository roomRepository;
     @Mock private UserRepository userRepository;
     @Mock private UserRooms userRooms;
-    @Mock private MessageLoader messageLoader;
     @Mock private MessageResponseMapper messageResponseMapper;
     @Mock private RoomLeaveHandler roomLeaveHandler;
-    // [ADDED] test/.../RoomJoinHandlerTest.java: RoomJoinHandler 생성자에 추가된
-    // ReadReceiptRepository 의존성 (참가자별 읽음 워터마크 스냅샷 조회용).
-    @Mock private ReadReceiptRepository readReceiptRepository;
     @Mock private RecentMessageCounter recentMessageCounter;
     @Mock private SocketIOClient client;
     @Mock private BroadcastOperations roomOperations;
@@ -64,10 +59,8 @@ class RoomJoinHandlerTest {
                 roomRepository,
                 userRepository,
                 userRooms,
-                messageLoader,
                 messageResponseMapper,
                 roomLeaveHandler,
-                readReceiptRepository,
                 recentMessageCounter);
     }
 
@@ -81,7 +74,7 @@ class RoomJoinHandlerTest {
     }
 
     @Test
-    void handleJoinRoom_addsParticipantLoadsMessagesAndBroadcasts() {
+    void handleJoinRoom_sendsSuccessBeforeFollowUpWorkAndBroadcasts() {
         SocketUser socketUser = new SocketUser("user-1", "tester", "session-1", "socket-1");
         User user = User.builder().id("user-1").name("tester").email("tester@example.com").build();
         Room room = Room.builder().id("room-1").name("room").participantIds(Set.of("user-1")).build();
@@ -92,11 +85,6 @@ class RoomJoinHandlerTest {
                 .type(MessageType.system)
                 .timestamp(1L)
                 .build();
-        FetchMessagesResponse loadResponse = FetchMessagesResponse.builder()
-                .messages(List.of())
-                .hasMore(false)
-                .build();
-
         when(client.get("user")).thenReturn(socketUser);
         when(userRepository.findById("user-1")).thenReturn(Optional.of(user));
         when(roomRepository.findById("room-1")).thenReturn(Optional.of(room));
@@ -107,13 +95,9 @@ class RoomJoinHandlerTest {
             message.setTimestamp(LocalDateTime.now());
             return message;
         });
-        when(messageLoader.loadMessages(any(FetchMessagesRequest.class), eq("user-1")))
-                .thenReturn(loadResponse);
         when(messageResponseMapper.mapToMessageResponse(any(Message.class), eq(null)))
                 .thenReturn(joinMessageResponse);
         when(socketIOServer.getRoomOperations("room-1")).thenReturn(roomOperations);
-        // [ADDED] 참가자별 읽음 워터마크 스냅샷 조회 스텁 (빈 목록 = 아무도 아직 안 읽음).
-        when(readReceiptRepository.findByRoomId("room-1")).thenReturn(List.of());
 
         handler.handleJoinRoom(client, "room-1");
 
@@ -121,6 +105,9 @@ class RoomJoinHandlerTest {
         verify(client).joinRoom("room-1");
         verify(userRooms).add("user-1", "room-1");
         verify(client).sendEvent(eq(JOIN_ROOM_SUCCESS), any());
+        InOrder inOrder = inOrder(client, messageRepository);
+        inOrder.verify(client).sendEvent(eq(JOIN_ROOM_SUCCESS), any());
+        inOrder.verify(messageRepository).save(any(Message.class));
         verify(roomOperations).sendEvent(MESSAGE, joinMessageResponse);
         verify(roomOperations).sendEvent(eq(PARTICIPANTS_UPDATE), any());
     }
